@@ -1,0 +1,15 @@
+import SwiftUI
+
+@main
+struct FlareApp: App {
+    init() {
+        // Must run before any text is drawn.
+        FontRegistrar.registerBundledFonts()
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+        }
+    }
+}
