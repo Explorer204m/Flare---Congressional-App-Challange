@@ -26,6 +26,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 
 struct RootView: View {
     @StateObject private var store = EmergencyStore()
+    @StateObject private var medicalStore = MedicalIDStore()
     @State private var tab: AppTab = .home
     @Environment(\.scenePhase) private var scenePhase
 
@@ -38,6 +39,7 @@ struct RootView: View {
             FlareTabBar(selection: $tab)
         }
         .environmentObject(store)
+        .environmentObject(medicalStore)
         .preferredColorScheme(.dark)
         .task { await store.start() }
         .onChange(of: scenePhase) { _, phase in
@@ -49,22 +51,16 @@ struct RootView: View {
     private var content: some View {
         switch tab {
         case .home:
-            HomeView(openMap: { tab = .map })
+            HomeView(openMap: { tab = .map }, openNumbers: { tab = .numbers })
         case .map:
             ComingSoonView(
                 title: "Nearby map",
                 systemImage: "map",
                 message: "An offline map with hospitals, police stations, fire stations and pharmacies is designed but not built yet.")
         case .numbers:
-            ComingSoonView(
-                title: "Numbers",
-                systemImage: "list.bullet",
-                message: "A searchable directory of emergency numbers by country is designed but not built yet. For now, tap \u{201C}All numbers and details\u{201D} on Home.")
+            NumbersView()
         case .medicalID:
-            ComingSoonView(
-                title: "Medical ID",
-                systemImage: "person.fill",
-                message: "Medical ID with one-tap calls to emergency contacts is designed but not built yet.")
+            MedicalIDView()
         }
     }
 }
@@ -99,9 +95,25 @@ struct FlareTabBar: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 4)
         .background(
-            Capsule().fill(Color.black.opacity(0.35))
+            ZStack {
+                // Frosted glass: blurs whatever scrolls underneath, so text behind
+                // the bar is not readable through it.
+                Capsule().fill(.regularMaterial)
+                // Navy tint keeps the bar on-brand and dark enough for contrast.
+                Capsule().fill(FlareColor.navyTop.opacity(0.55))
+                // Soft light along the top edge, like the edge of a glass pane.
+                Capsule().fill(
+                    LinearGradient(colors: [Color.white.opacity(0.14), Color.white.opacity(0.0)],
+                                   startPoint: .top, endPoint: .center))
+            }
         )
-        .overlay(Capsule().stroke(FlareColor.cardBorder, lineWidth: 1))
+        .overlay(
+            Capsule().stroke(
+                LinearGradient(colors: [Color.white.opacity(0.38), Color.white.opacity(0.08)],
+                               startPoint: .top, endPoint: .bottom),
+                lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.35), radius: 16, y: 6)
         .padding(.horizontal, 24)
         .padding(.bottom, 4)
     }

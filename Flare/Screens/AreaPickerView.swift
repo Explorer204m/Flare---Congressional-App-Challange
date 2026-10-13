@@ -8,6 +8,15 @@ struct AreaPickerView: View {
     @Environment(\.openURL) private var openURL
     @State private var query = ""
 
+    /// When true the picker only browses: choosing an area opens its numbers and does
+    /// not change the person's location.
+    let browseOnly: Bool
+    @State private var browsed: Area?
+
+    init(browseOnly: Bool = false) {
+        self.browseOnly = browseOnly
+    }
+
     private var filtered: [Area] {
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return store.allAreas }
@@ -24,7 +33,7 @@ struct AreaPickerView: View {
                 FlareBackground()
                 ScrollView {
                     LazyVStack(spacing: 10) {
-                        locationRow
+                        if !browseOnly { locationRow }
                         ForEach(filtered) { area in
                             row(for: area)
                         }
@@ -40,7 +49,7 @@ struct AreaPickerView: View {
                 }
                 .scrollIndicators(.hidden)
             }
-            .navigationTitle("Where are you?")
+            .navigationTitle(browseOnly ? "Look up numbers" : "Where are you?")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarColorScheme(.dark, for: .navigationBar)
             .searchable(text: $query,
@@ -51,6 +60,9 @@ struct AreaPickerView: View {
                     Button("Close") { dismiss() }
                         .font(.flareBody)
                 }
+            }
+            .navigationDestination(item: $browsed) { area in
+                AreaNumbersView(area: area)
             }
         }
     }
@@ -98,8 +110,12 @@ struct AreaPickerView: View {
     private func row(for area: Area) -> some View {
         let isSelected = store.selection?.areaID == area.id
         return Button {
-            store.select(area)
-            dismiss()
+            if browseOnly {
+                browsed = area
+            } else {
+                store.select(area)
+                dismiss()
+            }
         } label: {
             HStack(spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -112,7 +128,11 @@ struct AreaPickerView: View {
                         .foregroundStyle(FlareColor.secondaryText)
                 }
                 Spacer(minLength: 8)
-                if isSelected {
+                if browseOnly {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(FlareColor.secondaryText)
+                } else if isSelected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 20, weight: .bold))
                         .foregroundStyle(FlareColor.accent)

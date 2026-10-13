@@ -5,10 +5,11 @@ struct HomeView: View {
     @EnvironmentObject private var store: EmergencyStore
     @Environment(\.openURL) private var openURL
     let openMap: () -> Void
+    let openNumbers: () -> Void
     @State private var sheet: HomeSheet?
 
     enum HomeSheet: String, Identifiable {
-        case locationPicker, numbers, dataset
+        case locationPicker, dataset
         var id: String { rawValue }
     }
 
@@ -18,7 +19,7 @@ struct HomeView: View {
                 header
                 notices
                 CallArea(
-                    onShowNumbers: { sheet = .numbers },
+                    onShowNumbers: openNumbers,
                     onChooseLocation: { sheet = .locationPicker })
                 NearbySection(openMap: openMap)
                 ToolsSection()
@@ -31,7 +32,6 @@ struct HomeView: View {
         .sheet(item: $sheet) { current in
             switch current {
             case .locationPicker: AreaPickerView()
-            case .numbers: NumbersDetailView()
             case .dataset: DatasetInfoView()
             }
         }

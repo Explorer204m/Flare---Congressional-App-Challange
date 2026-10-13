@@ -109,6 +109,14 @@ final class EmergencyStore: ObservableObject {
         area.type.isRoot ? area.type.label : "\(area.type.label) \u{00B7} \(countryName(for: area))"
     }
 
+    /// All active numbers for any area in the dataset (used to browse another country).
+    /// Returns nil when the database can't be read, so the UI can say so instead of
+    /// showing an empty list that looks like "no numbers".
+    func contacts(forAreaID areaID: Int64) async -> [ContactRow]? {
+        guard let database else { return nil }
+        return try? await database.lookup(areaID: areaID)
+    }
+
     // MARK: Database
 
     private func openDatabase() async {

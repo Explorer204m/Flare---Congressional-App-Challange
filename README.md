@@ -12,14 +12,16 @@ Flare uses the phone's location to work out the country (or state) you are in an
 
 The project has no third-party dependencies. It was written outside Xcode, so the first build may report small issues to fix.
 
-## What is built (first milestone)
+## What is built
 
 | Area | Status |
 | --- | --- |
 | **Home** | Header with location and "Offline ready" pill, call area that adapts to the country, Nearby and Tools tiles (shown as "Coming soon"), floating tab bar |
 | **Location** | Core Location, one approximate fix at launch and on returning to the app; reverse geocoding to country, US state or listed city; manual country/state/city picker |
 | **Offline data** | `Flare/Resources/emergency.sqlite` is bundled, validated at startup, copied to Application Support and opened read-only |
-| Nearby, Map, Numbers, Medical ID, Battery saver, Fall detection, SMS / Satellite | Designed, **not built yet**. Their tiles and tabs say "Coming soon" instead of showing fake data |
+| **Numbers** | Every number that applies at the selected location (including the country or state above it), grouped by what it is for, with search, coverage, notes, hours and last-confirmed date. "Look up another country" browses any area offline without changing your location |
+| **Medical ID** | Name, date of birth, blood type, allergies, conditions, medications, organ donor status, notes and up to 5 emergency contacts with one-tap Call and Message. Everything is optional |
+| Nearby, Map, Battery saver, Fall detection, SMS / Satellite | Designed, **not built yet**. Their tiles and tabs say "Coming soon" instead of showing fake data |
 
 ## How the call area decides what to show
 
@@ -39,6 +41,13 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 - The numbers always work offline.
 - Finding your country from your location uses Apple's reverse geocoding, which needs a connection. Offline, Flare keeps the last place it confirmed. If the phone is more than about 100 km from that place, it shows a notice asking you to check the location.
 - A manual choice is kept until you tap "Use my location".
+
+## Medical ID storage and limits
+
+- Saved as one JSON file (`Application Support/Flare/medical-id.json`) with iOS complete file protection, so it is encrypted whenever the phone is locked. No network code touches it.
+- Flare can only show it once the phone is unlocked. The screen tells the person to also set up Medical ID in the Health app for lock-screen access. Flare does not read or write HealthKit.
+- If a saved file can't be read, it is never overwritten silently: "Try again" re-reads it, and "Start new" keeps the unreadable file (renamed) before saving.
+- Phone numbers must contain only digits, spaces, dashes, brackets and a leading +, so a call is never started from a guessed number.
 
 ## Data
 
@@ -61,11 +70,12 @@ Flare/
   Data/                    models, SQLite actor, call planner, dialing, bundle lookup
   Location/                Core Location + reverse geocoding
   Store/                   EmergencyStore (database + selection + call plan)
-  Screens/                 Home, call area, numbers, picker, data info, tabs
+  MedicalID/               model, file store, Medical ID screen and editor
+  Screens/                 Home, call area, Numbers, picker, data info, tabs
   Resources/               emergency.sqlite, Archivo fonts (SIL OFL)
   Assets.xcassets/         app icon, accent and launch colors
 ```
 
 ## Next
 
-Nearby map and services, Numbers directory, Medical ID, battery saver mode, fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.
+Nearby map and services, battery saver mode, fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.

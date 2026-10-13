@@ -325,3 +325,40 @@ extension View {
             .accessibilityHint("Not available yet")
     }
 }
+
+// MARK: - Search field
+
+/// Plain search box used inside scrolling screens (the system `.searchable` needs a navigation bar).
+struct FlareSearchField: View {
+    @Binding var text: String
+    let prompt: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(FlareColor.secondaryText)
+            TextField("", text: $text,
+                      prompt: Text(prompt).foregroundStyle(FlareColor.secondaryText))
+                .font(.flareBody)
+                .foregroundStyle(FlareColor.text)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+            if !text.isEmpty {
+                Button {
+                    text = ""
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(FlareColor.secondaryText)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, text.isEmpty ? 14 : 0)
+        .frame(minHeight: 48)
+        .cardSurface(cornerRadius: 16)
+    }
+}
