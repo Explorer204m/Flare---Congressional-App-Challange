@@ -21,7 +21,8 @@ The project has no third-party dependencies. It was written outside Xcode, so th
 | **Offline data** | `Flare/Resources/emergency.sqlite` is bundled, validated at startup, copied to Application Support and opened read-only |
 | **Numbers** | Every number that applies at the selected location (including the country or state above it), grouped by what it is for, with search, coverage, notes, hours and last-confirmed date. "Look up another country" browses any area offline without changing your location |
 | **Medical ID** | Name, date of birth, blood type, allergies, conditions, medications, organ donor status, notes and up to 5 emergency contacts with one-tap Call and Message. Everything is optional |
-| Nearby, Map, Battery saver, Fall detection, SMS / Satellite | Designed, **not built yet**. Their tiles and tabs say "Coming soon" instead of showing fake data |
+| **Nearby (Map tab)** | Live search of hospitals, police stations, fire stations and pharmacies through Apple Maps (MapKit), shown on a map and as a list with Directions and Call. Results are saved on the phone, so with no connection Flare shows places saved from earlier searches (within 100 km). A **Compass** view points to the nearest one using only GPS and the compass: no map tiles, no signal |
+| Battery saver, Fall detection, SMS / Satellite | Designed, **not built yet**. Their tiles say "Coming soon" instead of showing fake data |
 
 ## How the call area decides what to show
 
@@ -41,6 +42,15 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 - The numbers always work offline.
 - Finding your country from your location uses Apple's reverse geocoding, which needs a connection. Offline, Flare keeps the last place it confirmed. If the phone is more than about 100 km from that place, it shows a notice asking you to check the location.
 - A manual choice is kept until you tap "Use my location".
+
+## Nearby: how it works and its limits
+
+- Searching sends the approximate location to Apple Maps. The location permission text says so. Flare has no servers of its own.
+- Flare only searches after the person has opened the Nearby tab once; after that it refreshes quietly when the phone moves more than 1 km or after 10 minutes, so saved places stay fresh.
+- Saved places live in `Application Support/Flare/nearby-cache.json` (complete file protection, excluded from backups, at most 600 places, dropped after 90 days). They reveal roughly where the person has been, so the tab shows a count and a "Delete saved places" button.
+- Offline, only places near somewhere the person has already searched are available. A place that has never been searched has no data. Bundling an offline OpenStreetMap facility database would remove that limit (a later option).
+- Compass direction is a straight line, not a route. The screen says so, warns when the location is approximate, and works without a compass (it then says the direction in words).
+- Results are not verified by Flare. A listed hospital may have no emergency department, and a place's phone number is not an emergency number. The screen says both.
 
 ## Medical ID storage and limits
 
@@ -71,6 +81,7 @@ Flare/
   Location/                Core Location + reverse geocoding
   Store/                   EmergencyStore (database + selection + call plan)
   MedicalID/               model, file store, Medical ID screen and editor
+  Nearby/                  place models, live search store, saved-places cache, compass
   Screens/                 Home, call area, Numbers, picker, data info, tabs
   Resources/               emergency.sqlite, Archivo fonts (SIL OFL)
   Assets.xcassets/         app icon, accent and launch colors
@@ -78,4 +89,4 @@ Flare/
 
 ## Next
 
-Nearby map and services, battery saver mode, fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.
+Battery saver mode, fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.

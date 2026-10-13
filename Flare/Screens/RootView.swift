@@ -27,6 +27,7 @@ enum AppTab: String, CaseIterable, Identifiable {
 struct RootView: View {
     @StateObject private var store = EmergencyStore()
     @StateObject private var medicalStore = MedicalIDStore()
+    @StateObject private var nearby = NearbyStore()
     @State private var tab: AppTab = .home
     @Environment(\.scenePhase) private var scenePhase
 
@@ -40,8 +41,12 @@ struct RootView: View {
         }
         .environmentObject(store)
         .environmentObject(medicalStore)
+        .environmentObject(nearby)
         .preferredColorScheme(.dark)
         .task { await store.start() }
+        .onChange(of: store.location.latestFix) { _, fix in
+            if let fix { nearby.updateFix(fix) }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.refreshLocation() }
         }
@@ -53,10 +58,7 @@ struct RootView: View {
         case .home:
             HomeView(openMap: { tab = .map }, openNumbers: { tab = .numbers })
         case .map:
-            ComingSoonView(
-                title: "Nearby map",
-                systemImage: "map",
-                message: "An offline map with hospitals, police stations, fire stations and pharmacies is designed but not built yet.")
+            NearbyView()
         case .numbers:
             NumbersView()
         case .medicalID:
@@ -99,8 +101,8 @@ struct FlareTabBar: View {
                 // Frosted glass: blurs whatever scrolls underneath, so text behind
                 // the bar is not readable through it.
                 Capsule().fill(.regularMaterial)
-                // Navy tint keeps the bar on-brand and dark enough for contrast.
-                Capsule().fill(FlareColor.navyTop.opacity(0.55))
+                // Mostly opaque navy tint: nothing behind the bar shows through, but the edge highlight still reads as glass.
+                Capsule().fill(FlareColor.navyMid.opacity(0.94))
                 // Soft light along the top edge, like the edge of a glass pane.
                 Capsule().fill(
                     LinearGradient(colors: [Color.white.opacity(0.14), Color.white.opacity(0.0)],

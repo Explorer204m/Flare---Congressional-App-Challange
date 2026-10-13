@@ -135,29 +135,36 @@ struct HomeView: View {
     }
 }
 
-// MARK: - Nearby (designed, not built yet)
+// MARK: - Nearby
 
 struct NearbySection: View {
+    @EnvironmentObject private var nearby: NearbyStore
     let openMap: () -> Void
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+    private func subtitle(for kind: NearbyKind) -> String {
+        if let meters = nearby.nearestDistance(for: kind) {
+            return "\(Geo.distanceText(meters)) away"
+        }
+        return "Find nearby"
+    }
 
     var body: some View {
         VStack(spacing: 12) {
             SectionHeader(title: "Nearby", actionTitle: "Open map", action: openMap)
             LazyVGrid(columns: columns, spacing: 12) {
-                FeatureTile(systemImage: "cross.case.fill", title: "Hospital",
-                            subtitle: "Coming soon", tint: FlareColor.hospital)
-                    .comingSoon()
-                FeatureTile(systemImage: "shield.fill", title: "Police",
-                            subtitle: "Coming soon", tint: FlareColor.police)
-                    .comingSoon()
-                FeatureTile(systemImage: "flame.fill", title: "Fire station",
-                            subtitle: "Coming soon", tint: FlareColor.fire)
-                    .comingSoon()
-                FeatureTile(systemImage: "pills.fill", title: "Pharmacy",
-                            subtitle: "Coming soon", tint: FlareColor.pharmacy)
-                    .comingSoon()
+                ForEach(NearbyKind.allCases) { kind in
+                    Button {
+                        nearby.selectedKind = kind
+                        openMap()
+                    } label: {
+                        FeatureTile(systemImage: kind.systemImage, title: kind.title,
+                                    subtitle: subtitle(for: kind), tint: kind.tint)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(kind.title), \(subtitle(for: kind)). Opens the Nearby map")
+                }
             }
         }
     }
