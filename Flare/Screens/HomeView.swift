@@ -170,22 +170,35 @@ struct NearbySection: View {
     }
 }
 
-// MARK: - Tools (designed, not built yet)
+// MARK: - Tools
 
 struct ToolsSection: View {
+    @EnvironmentObject private var emergency: EmergencyModeController
+
     var body: some View {
         VStack(spacing: 12) {
             SectionHeader(title: "Tools")
             HStack(spacing: 12) {
-                ToolTile(systemImage: "battery.50percent", title: "Battery saver",
-                         subtitle: "Coming soon", tint: FlareColor.ready)
-                    .comingSoon()
+                Button {
+                    emergency.isActive = true
+                } label: {
+                    ToolTile(systemImage: "bolt.shield.fill", title: "Emergency Mode",
+                             subtitle: "Saves battery", tint: FlareColor.ready)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Emergency Mode. Saves battery, shows your coordinates and numbers")
+
                 ToolTile(systemImage: "figure.fall", title: "Fall detection",
                          subtitle: "Coming soon", tint: FlareColor.fire)
                     .comingSoon()
-                ToolTile(systemImage: "antenna.radiowaves.left.and.right", title: "SMS / Satellite",
-                         subtitle: "Coming soon", tint: FlareColor.police)
-                    .comingSoon()
+                Button {
+                    emergency.isActive = true
+                } label: {
+                    ToolTile(systemImage: "antenna.radiowaves.left.and.right", title: "SMS / Satellite",
+                             subtitle: "In Emergency Mode", tint: FlareColor.police)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("SMS and satellite guidance. Opens Emergency Mode")
             }
         }
     }

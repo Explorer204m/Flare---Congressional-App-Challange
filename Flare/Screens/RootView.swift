@@ -28,6 +28,7 @@ struct RootView: View {
     @StateObject private var store = EmergencyStore()
     @StateObject private var medicalStore = MedicalIDStore()
     @StateObject private var nearby = NearbyStore()
+    @ObservedObject private var emergency = EmergencyModeController.shared
     @State private var tab: AppTab = .home
     @Environment(\.scenePhase) private var scenePhase
 
@@ -42,6 +43,15 @@ struct RootView: View {
         .environmentObject(store)
         .environmentObject(medicalStore)
         .environmentObject(nearby)
+        .environmentObject(emergency)
+        .fullScreenCover(isPresented: $emergency.isActive) {
+            // The cover sits above the modifiers that inject the environment, so it
+            // does not inherit them: pass every object it reads explicitly.
+            EmergencyModeView()
+                .environmentObject(store)
+                .environmentObject(medicalStore)
+                .environmentObject(emergency)
+        }
         .preferredColorScheme(.dark)
         .task { await store.start() }
         .onChange(of: store.location.latestFix) { _, fix in

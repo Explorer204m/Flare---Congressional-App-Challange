@@ -22,7 +22,8 @@ The project has no third-party dependencies. It was written outside Xcode, so th
 | **Numbers** | Every number that applies at the selected location (including the country or state above it), grouped by what it is for, with search, coverage, notes, hours and last-confirmed date. "Look up another country" browses any area offline without changing your location |
 | **Medical ID** | Name, date of birth, blood type, allergies, conditions, medications, organ donor status, notes and up to 5 emergency contacts with one-tap Call and Message. Everything is optional |
 | **Nearby (Map tab)** | Live search of hospitals, police stations, fire stations and pharmacies through Apple Maps (MapKit), shown on a map and as a list with Directions and Call. Results are saved on the phone, so with no connection Flare shows places saved from earlier searches (within 100 km). A **Compass** view points to the nearest one using only GPS and the compass: no map tiles, no signal |
-| Battery saver, Fall detection, SMS / Satellite | Designed, **not built yet**. Their tiles say "Coming soon" instead of showing fake data |
+| **Emergency Mode** | One dark, low-power screen (Home > Tools, or the Shortcuts / Siri / Action Button action "Start Emergency Mode"): the local emergency number buttons, GPS coordinates with a Plus Code, "Text my location to my emergency contacts", contact call buttons, Medical ID summary, battery guard and a "No signal?" card with satellite guidance |
+| Fall detection | Designed, **not built yet**. Its tile says "Coming soon" instead of showing fake data |
 
 ## How the call area decides what to show
 
@@ -51,6 +52,15 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 - Offline, only places near somewhere the person has already searched are available. A place that has never been searched has no data. Bundling an offline OpenStreetMap facility database would remove that limit (a later option).
 - Compass direction is a straight line, not a route. The screen says so, warns when the location is approximate, and works without a compass (it then says the direction in words).
 - Results are not verified by Flare. A listed hospital may have no emergency department, and a place's phone number is not an emergency number. The screen says both.
+
+## Emergency Mode: how it works and its limits
+
+- **Battery guard steps by itself:** Normal, then Saving power at 30% or whenever Low Power Mode is on, then Critical at 10%. Saving power lowers brightness to at most 50% and slows GPS. Critical lowers it to at most 30%, drops the Medical ID card and keeps the call buttons, coordinates, text-my-location and contacts. Flare only ever lowers brightness (never raises it) and puts it back when the screen closes or Flare leaves the foreground. While charging, the steps follow Low Power Mode only.
+- **Time left** is an estimate from how fast the battery dropped since the screen opened (needs about 5 minutes and a 1% drop). iOS gives apps no such number, so the screen says it is rough.
+- **What iOS does not allow, and the app says so:** apps can't pause other apps, turn on Low Power Mode, Airplane Mode or radios, show other apps' battery use, or make the phone open an app when it is unlocked. Emergency Mode shows a checklist for what the person must do, and the "Make Emergency Mode one tap" guide explains a Shortcuts shortcut (Set Low Power Mode, then Start Emergency Mode), the Action Button / Back Tap, and Guided Access. The guide's setup steps depend on iPhone model and iOS version and should be tried before they are needed. If Flare is on screen when the phone locks, iOS returns to it on unlock.
+- **Text my location** opens the system Messages composer with the person's emergency contacts from Medical ID, coordinates, an Apple Maps link and a Plus Code. iOS does not let an app send a text silently, so the person taps Send. Where Messages can't send (for example the simulator) it offers the share sheet.
+- **Satellite:** Flare can't use satellite. The card only points to the iPhone's own Emergency SOS via satellite on models and in countries that support it.
+- Coordinates come from GPS, run only while the screen is open, and never leave the phone. Plus Code encoding follows the Open Location Code standard (checked against its published example).
 
 ## Medical ID storage and limits
 
@@ -82,6 +92,7 @@ Flare/
   Store/                   EmergencyStore (database + selection + call plan)
   MedicalID/               model, file store, Medical ID screen and editor
   Nearby/                  place models, live search store, saved-places cache, compass
+  EmergencyMode/           Emergency Mode screen, battery monitor, GPS, Plus Code, text-location, Shortcuts action
   Screens/                 Home, call area, Numbers, picker, data info, tabs
   Resources/               emergency.sqlite, Archivo fonts (SIL OFL)
   Assets.xcassets/         app icon, accent and launch colors
@@ -89,4 +100,4 @@ Flare/
 
 ## Next
 
-Battery saver mode, fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.
+Fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.
