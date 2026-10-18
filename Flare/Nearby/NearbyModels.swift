@@ -5,7 +5,7 @@ import CoreLocation
 /// The kinds of place the Nearby tab looks for.
 enum NearbyKind: String, CaseIterable, Identifiable, Codable {
     case hospital, police, fire, pharmacy
-    /// For pets. Kept out of "Closest 4" and the Home tiles, which are for people.
+    /// For pets. Kept out of "Nearest" and the Home tiles, which are for people.
     case vet
 
     var id: String { rawValue }
@@ -68,26 +68,24 @@ enum NearbyKind: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-/// What the Map tab is showing: the closest few places of any kind, or one kind of place.
+/// What the Map tab is showing: the nearest place of each kind, or one kind of place.
 enum NearbyScope: Hashable, Identifiable {
-    case closest
+    /// The nearest hospital, police station, fire station and pharmacy: one of each.
+    case nearestOfEach
     case kind(NearbyKind)
 
-    /// How many places the "Closest" tab shows.
-    static let closestCount = 4
-
-    static let all: [NearbyScope] = [.closest] + NearbyKind.allCases.map { NearbyScope.kind($0) }
+    static let all: [NearbyScope] = [.nearestOfEach] + NearbyKind.allCases.map { NearbyScope.kind($0) }
 
     var id: String {
         switch self {
-        case .closest: return "closest"
+        case .nearestOfEach: return "nearest"
         case .kind(let kind): return kind.rawValue
         }
     }
 
     var title: String {
         switch self {
-        case .closest: return "Closest \(Self.closestCount)"
+        case .nearestOfEach: return "Nearest"
         case .kind(let kind): return kind.title
         }
     }
@@ -95,7 +93,7 @@ enum NearbyScope: Hashable, Identifiable {
     /// Heading above the list of results.
     var listTitle: String {
         switch self {
-        case .closest: return "The \(Self.closestCount) closest to you"
+        case .nearestOfEach: return "Nearest of each"
         case .kind(let kind): return kind.listTitle
         }
     }
@@ -103,21 +101,21 @@ enum NearbyScope: Hashable, Identifiable {
     /// For sentences such as "No saved places near here".
     var noun: String {
         switch self {
-        case .closest: return "places"
+        case .nearestOfEach: return "places"
         case .kind(let kind): return kind.title.lowercased()
         }
     }
 
     var systemImage: String {
         switch self {
-        case .closest: return "mappin.and.ellipse"
+        case .nearestOfEach: return "mappin.and.ellipse"
         case .kind(let kind): return kind.systemImage
         }
     }
 
     var tint: Color {
         switch self {
-        case .closest: return FlareColor.link
+        case .nearestOfEach: return FlareColor.link
         case .kind(let kind): return kind.tint
         }
     }

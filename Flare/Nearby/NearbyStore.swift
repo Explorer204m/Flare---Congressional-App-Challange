@@ -23,7 +23,7 @@ final class NearbyStore: ObservableObject {
         var savedKinds: Set<NearbyKind> = []
     }
 
-    @Published var selectedScope: NearbyScope = .closest
+    @Published var selectedScope: NearbyScope = .nearestOfEach
     @Published var selectedPlaceID: String?
     @Published private(set) var fix: CLLocation?
     @Published private(set) var live: [NearbyKind: [NearbyPlace]] = [:]
@@ -108,7 +108,8 @@ final class NearbyStore: ObservableObject {
         return Result(places: saved, source: .saved, savedKinds: saved.isEmpty ? [] : [kind])
     }
 
-    /// Either one kind, or the closest few places of any kind mixed together.
+    /// Either one kind, or the nearest hospital, police station, fire station and pharmacy
+    /// (one of each, nearest first).
     /// A kind with no live results falls back to its saved places, and each place says which it is.
     func result(in scope: NearbyScope) -> Result {
         switch scope {
@@ -116,14 +117,15 @@ final class NearbyStore: ObservableObject {
             var single = result(for: kind)
             if single.source == .saved && !single.places.isEmpty { single.savedKinds = [kind] }
             return single
-        case .closest:
+        case .nearestOfEach:
             guard let fix else { return Result(places: [], source: .saved) }
-            // Only the kinds for people: a vet should never push a hospital out of the closest 4.
+            // Only the kinds for people (no vet). A kind with nothing found is simply left out.
             let parts = NearbyKind.peopleKinds.map { result(for: $0) }
             let nearest = parts
-                .flatMap { $0.places }
+                .compactMap { part in
+                    part.places.min { $0.distance(from: fix) < $1.distance(from: fix) }
+                }
                 .sorted { $0.distance(from: fix) < $1.distance(from: fix) }
-                .prefix(NearbyScope.closestCount)
             let shown = Set(nearest.map { $0.kind })
             let saved = parts.reduce(into: Set<NearbyKind>()) { $0.formUnion($1.savedKinds) }
                 .intersection(shown)

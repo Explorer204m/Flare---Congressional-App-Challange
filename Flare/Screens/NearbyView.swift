@@ -250,7 +250,7 @@ struct NearbyView: View {
                         place: place,
                         from: nearby.fix,
                         showsSavedDate: result.savedKinds.contains(place.kind),
-                        showsKind: scope == .closest,
+                        showsKind: scope == .nearestOfEach,
                         isSelected: nearby.selectedPlaceID == place.id,
                         onSelect: { select(place) })
                 }
