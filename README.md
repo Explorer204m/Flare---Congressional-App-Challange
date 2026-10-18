@@ -22,8 +22,8 @@ The project has no third-party dependencies. It was written outside Xcode, so th
 | **Numbers** | Every number that applies at the selected location (including the country or state above it), grouped by what it is for, with search, coverage, notes, hours and last-confirmed date. "Look up another country" browses any area offline without changing your location |
 | **Medical ID** | Name, date of birth, blood type, allergies, conditions, medications, organ donor status, notes and up to 5 emergency contacts with one-tap Call and Message. Everything is optional |
 | **Nearby (Map tab)** | Live search of hospitals, police stations, fire stations and pharmacies through Apple Maps (MapKit), shown on a map and as a list with Directions and Call. Results are saved on the phone, so with no connection Flare shows places saved from earlier searches (within 100 km). A **Compass** view points to the nearest one using only GPS and the compass: no map tiles, no signal |
-| **Emergency Mode** | One dark, low-power screen (Home > Tools, or the Shortcuts / Siri / Action Button action "Start Emergency Mode"): the local emergency number buttons, GPS coordinates with a Plus Code, "Text my location to my emergency contacts", contact call buttons, Medical ID summary, battery guard and a "No signal?" card with satellite guidance |
-| Fall detection | Designed, **not built yet**. Its tile says "Coming soon" instead of showing fake data |
+| **Emergency Mode** | A minimal black battery-saver screen (Home > Tools, or the Shortcuts / Siri / Action Button action "Start Emergency Mode"): the local emergency number and CALL button, "Send my location by SMS", Medical ID, last saved location; a Details sheet has coordinates, Plus Code, battery guard and a "No signal?" card with satellite guidance |
+| **Fall detection** | Off by default, turned on from Home > Tools > Fall detection (or Emergency Mode > Details). Watches the motion sensor for a hard impact followed by no movement, then sounds an alarm with a 30-second "I'm OK" countdown, a Call button and "Send my location by SMS". Experimental, with a practice alert and three sensitivity levels |
 
 ## How the call area decides what to show
 
@@ -55,12 +55,22 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 
 ## Emergency Mode: how it works and its limits
 
-- **Battery guard steps by itself:** Normal, then Saving power at 30% or whenever Low Power Mode is on, then Critical at 10%. Saving power lowers brightness to at most 50% and slows GPS. Critical lowers it to at most 30%, drops the Medical ID card and keeps the call buttons, coordinates, text-my-location and contacts. Flare only ever lowers brightness (never raises it) and puts it back when the screen closes or Flare leaves the foreground. While charging, the steps follow Low Power Mode only.
-- **Time left** is an estimate from how fast the battery dropped since the screen opened (needs about 5 minutes and a 1% drop). iOS gives apps no such number, so the screen says it is rough.
+- **The screen follows the design:** pure black, battery percent and a "Battery saver on" pill at the top, the local emergency number with the big CALL button, "Send my location by SMS", "Medical ID", a line with the last saved location, and "Turn off battery saver" at the bottom. Tapping the location line opens a Details sheet with coordinates, a Plus Code, Copy / Update now, the battery guard, a keep-screen-on switch and the "No signal?" card.
+- **Battery guard steps by itself:** Normal, then Saving power at 30% or whenever Low Power Mode is on, then Critical at 10% (the percent and pill turn red). Brightness is capped at 60% / 50% / 30% and GPS is read once every 5 / 10 / 20 minutes instead of continuously. Flare only ever lowers brightness (never raises it) and puts it back when the screen closes or Flare leaves the foreground. While charging, the steps follow Low Power Mode only.
+- **Time left** (in Details) is an estimate from how fast the battery dropped since the screen opened (needs about 5 minutes and a 1% drop). iOS gives apps no such number, so the screen says it is rough.
 - **What iOS does not allow, and the app says so:** apps can't pause other apps, turn on Low Power Mode, Airplane Mode or radios, show other apps' battery use, or make the phone open an app when it is unlocked. Emergency Mode shows a checklist for what the person must do, and the "Make Emergency Mode one tap" guide explains a Shortcuts shortcut (Set Low Power Mode, then Start Emergency Mode), the Action Button / Back Tap, and Guided Access. The guide's setup steps depend on iPhone model and iOS version and should be tried before they are needed. If Flare is on screen when the phone locks, iOS returns to it on unlock.
-- **Text my location** opens the system Messages composer with the person's emergency contacts from Medical ID, coordinates, an Apple Maps link and a Plus Code. iOS does not let an app send a text silently, so the person taps Send. Where Messages can't send (for example the simulator) it offers the share sheet.
+- **Send my location by SMS** opens the system Messages composer with the person's emergency contacts from Medical ID, coordinates, an Apple Maps link and a Plus Code. iOS does not let an app send a text silently, so the person taps Send. Where Messages can't send (for example the simulator) it offers the share sheet.
 - **Satellite:** Flare can't use satellite. The card only points to the iPhone's own Emergency SOS via satellite on models and in countries that support it.
-- Coordinates come from GPS, run only while the screen is open, and never leave the phone. Plus Code encoding follows the Open Location Code standard (checked against its published example).
+- Coordinates come from GPS, read every few minutes only while the screen is open, and never leave the phone except in a message the person sends. Plus Code encoding follows the Open Location Code standard (checked against its published example).
+
+## Fall detection: how it works and its limits
+
+- **Detection:** `FallAnalyzer` (pure logic, no iOS dependencies) reads total acceleration at 50 Hz. A fall is reported when a hard impact (2.5 / 3.0 / 3.8 g by sensitivity; 0.8 g lower right after a short weightless moment) is followed by 1 s of settling and 3 s of the phone staying within 0.25 g of resting. Any movement in that window cancels it, so walking away, picking the phone up and running don't count. After a report it stays quiet for 10 s. The thresholds are starting values checked only against simulated traces (walking, sitting down hard, a fall then lying still, a fall then walking away, a phone slammed on a table). They have not been tested with real falls and should be tuned on a device.
+- **Only while Flare is open:** iOS suspends apps in the background, so nothing is watched while the phone is locked or Flare is closed. The screen says so, and points to Emergency Mode's "Keep the screen on" switch. Running in the background would need a background mode such as continuous location, which would drain the battery, so it was left out on purpose.
+- **Never calls or texts by itself:** iOS needs a tap for both. The alert keeps an alarm and vibration going once a second (sound follows the ringer switch), keeps the screen awake, and shows large I'm OK, Call and Send-location buttons. After 30 s it says "No response" and keeps alarming.
+- **False alarms are expected:** a dropped phone that lies still looks like a fall. "I'm OK" dismisses it and pauses detection for 15 s.
+- **On and off:** the setting is saved on the phone (off by default). The Simulator has no accelerometer, so the switch is disabled there and the screen explains why. "Start a practice alert" shows the whole alert without calling or sending anything.
+- Apple Watch's own fall detection works in the background and is separate. Flare's does not replace it.
 
 ## Medical ID storage and limits
 
@@ -92,6 +102,7 @@ Flare/
   Store/                   EmergencyStore (database + selection + call plan)
   MedicalID/               model, file store, Medical ID screen and editor
   Nearby/                  place models, live search store, saved-places cache, compass
+  FallDetection/           Fall analyzer, controller (on/off, countdown), alert and settings screens
   EmergencyMode/           Emergency Mode screen, battery monitor, GPS, Plus Code, text-location, Shortcuts action
   Screens/                 Home, call area, Numbers, picker, data info, tabs
   Resources/               emergency.sqlite, Archivo fonts (SIL OFL)
@@ -100,4 +111,4 @@ Flare/
 
 ## Next
 
-Fall detection (Core Motion, with confirmation), SMS and satellite guidance, onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.
+Onboarding and location permission screens, settings. Check the App Store and trademark records before the name Flare is final.

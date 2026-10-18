@@ -1,15 +1,16 @@
 import Foundation
 import CoreLocation
 
-/// GPS position for Emergency Mode. Runs only while the screen is open, and asks for less
-/// as the battery drops. Nothing here leaves the phone.
+/// GPS position for Emergency Mode. To save battery it asks for one fix now and then one
+/// every few minutes (the interval grows as the battery drops) instead of keeping GPS
+/// running. It runs only while the screen is open, and nothing here leaves the phone.
 @MainActor
 final class EmergencyPositionService: NSObject, ObservableObject {
     @Published private(set) var location: CLLocation?
     @Published private(set) var isDenied = false
 
     private let manager = CLLocationManager()
-    private var running = false
+    private var loop: Task<Void, Never>?
     private var tier: PowerTier = .normal
 
     override init() {
@@ -29,8 +30,7 @@ final class EmergencyPositionService: NSObject, ObservableObject {
         case .notDetermined:
             manager.requestWhenInUseAuthorization()
         case .authorizedWhenInUse, .authorizedAlways:
-            manager.startUpdatingLocation()
-            running = true
+            beginLoop()
         default:
             break
         }
@@ -39,30 +39,42 @@ final class EmergencyPositionService: NSObject, ObservableObject {
     func apply(tier: PowerTier) {
         self.tier = tier
         configure()
+        if loop != nil { beginLoop() }
     }
 
     func stop() {
-        manager.stopUpdatingLocation()
-        running = false
+        loop?.cancel()
+        loop = nil
     }
 
-    /// Ask for a fresh position right now.
+    /// Ask for a fresh position right now (for example just before sending a location).
     func refreshNow() {
-        if running { manager.requestLocation() }
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            manager.requestLocation()
+        default:
+            break
+        }
+    }
+
+    /// One fix now, then one every `tier.locationInterval`.
+    private func beginLoop() {
+        loop?.cancel()
+        manager.requestLocation()
+        loop = Task { [weak self] in
+            while !Task.isCancelled {
+                let seconds = self?.tier.locationInterval ?? 600
+                try? await Task.sleep(for: .seconds(seconds))
+                if Task.isCancelled { break }
+                self?.manager.requestLocation()
+            }
+        }
     }
 
     private func configure() {
-        switch tier {
-        case .normal:
-            manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-            manager.distanceFilter = 10
-        case .saver:
-            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-            manager.distanceFilter = 50
-        case .critical:
-            manager.desiredAccuracy = kCLLocationAccuracyHundredMeters
-            manager.distanceFilter = 100
-        }
+        manager.desiredAccuracy = tier == .critical
+            ? kCLLocationAccuracyHundredMeters
+            : kCLLocationAccuracyNearestTenMeters
     }
 }
 
@@ -71,9 +83,8 @@ extension EmergencyPositionService: CLLocationManagerDelegate {
         let status = manager.authorizationStatus
         Task { @MainActor in
             self.isDenied = Self.denied(status)
-            if status == .authorizedWhenInUse || status == .authorizedAlways, !self.running {
-                self.manager.startUpdatingLocation()
-                self.running = true
+            if (status == .authorizedWhenInUse || status == .authorizedAlways), self.loop == nil {
+                self.beginLoop()
             }
         }
     }

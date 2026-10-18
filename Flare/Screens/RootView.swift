@@ -29,6 +29,10 @@ struct RootView: View {
     @StateObject private var medicalStore = MedicalIDStore()
     @StateObject private var nearby = NearbyStore()
     @ObservedObject private var emergency = EmergencyModeController.shared
+    @ObservedObject private var fall = FallDetectionController.shared
+    /// The cover is driven by local state that starts false, so it always plays a real
+    /// presentation. A Shortcuts launch sets `emergency.isActive` before this view exists.
+    @State private var showEmergency = false
     @State private var tab: AppTab = .home
     @Environment(\.scenePhase) private var scenePhase
 
@@ -40,11 +44,14 @@ struct RootView: View {
         .safeAreaInset(edge: .bottom) {
             FlareTabBar(selection: $tab)
         }
+        // Before the environment objects below, so the alert can read them.
+        // Hidden while Emergency Mode is up: it shows the alert itself.
+        .fallAlertOverlay(enabled: !showEmergency)
         .environmentObject(store)
         .environmentObject(medicalStore)
         .environmentObject(nearby)
         .environmentObject(emergency)
-        .fullScreenCover(isPresented: $emergency.isActive) {
+        .fullScreenCover(isPresented: $showEmergency) {
             // The cover sits above the modifiers that inject the environment, so it
             // does not inherit them: pass every object it reads explicitly.
             EmergencyModeView()
@@ -54,11 +61,29 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         .task { await store.start() }
+        .task { fall.appBecameActive() }
+        .task {
+            // Launched by the "Start Emergency Mode" action: show it once the UI is up.
+            try? await Task.sleep(for: .milliseconds(500))
+            if emergency.isActive { showEmergency = true }
+        }
+        .onChange(of: emergency.isActive) { _, active in
+            showEmergency = active
+        }
+        .onChange(of: showEmergency) { _, shown in
+            if !shown { emergency.isActive = false }
+        }
         .onChange(of: store.location.latestFix) { _, fix in
             if let fix { nearby.updateFix(fix) }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { store.refreshLocation() }
+            if phase == .active {
+                store.refreshLocation()
+                fall.appBecameActive()
+                if emergency.isActive && !showEmergency { showEmergency = true }
+            } else {
+                fall.appLeft()
+            }
         }
     }
 

@@ -18,19 +18,29 @@ enum PowerTier: Int, Comparable {
 
     var detail: String {
         switch self {
-        case .normal: return "Flare is using normal power."
-        case .saver: return "Dimmer screen and less frequent GPS."
-        case .critical: return "Only the essentials are shown to make the battery last."
+        case .normal: return "Screen dimmed a little, GPS checked every 5 minutes."
+        case .saver: return "Dimmer screen, GPS checked every 10 minutes."
+        case .critical: return "Dimmest screen, GPS checked every 20 minutes."
         }
     }
 
-    /// Highest screen brightness Flare allows in this step (nil = leave it alone).
+    /// Highest screen brightness Flare allows in this step.
     /// Flare only ever lowers brightness; it never raises it.
     var brightnessCap: Double? {
         switch self {
-        case .normal: return nil
+        case .normal: return 0.6
         case .saver: return 0.5
         case .critical: return 0.3
+        }
+    }
+
+    /// How often Emergency Mode asks GPS for a new position. A single fix every few minutes
+    /// uses far less battery than keeping GPS running.
+    var locationInterval: TimeInterval {
+        switch self {
+        case .normal: return 5 * 60
+        case .saver: return 10 * 60
+        case .critical: return 20 * 60
         }
     }
 

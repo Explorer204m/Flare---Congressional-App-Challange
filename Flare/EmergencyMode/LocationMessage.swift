@@ -10,11 +10,13 @@ enum LocationMessage {
         String(format: "%.5f, %.5f", location.coordinate.latitude, location.coordinate.longitude)
     }
 
-    static func body(for location: CLLocation, placeName: String?) -> String {
+    static func body(for location: CLLocation, placeName: String?, now: Date = Date()) -> String {
         let lat = String(format: "%.5f", location.coordinate.latitude)
         let lon = String(format: "%.5f", location.coordinate.longitude)
         var lines = ["I need help. This is my location:"]
         lines.append("\(lat), \(lon) (accuracy about \(Int(max(location.horizontalAccuracy, 1).rounded())) m)")
+        let minutes = Int(now.timeIntervalSince(location.timestamp) / 60)
+        if minutes >= 2 { lines.append("This position is from \(minutes) minutes ago.") }
         lines.append("https://maps.apple.com/?ll=\(lat),\(lon)&q=My%20location")
         if let code = PlusCode.encode(latitude: location.coordinate.latitude,
                                       longitude: location.coordinate.longitude) {

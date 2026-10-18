@@ -174,6 +174,8 @@ struct NearbySection: View {
 
 struct ToolsSection: View {
     @EnvironmentObject private var emergency: EmergencyModeController
+    @ObservedObject private var fall = FallDetectionController.shared
+    @State private var showFall = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -182,15 +184,21 @@ struct ToolsSection: View {
                 Button {
                     emergency.isActive = true
                 } label: {
-                    ToolTile(systemImage: "bolt.shield.fill", title: "Emergency Mode",
+                    ToolTile(systemImage: "bolt.circle.fill", title: "Emergency Mode",
                              subtitle: "Saves battery", tint: FlareColor.ready)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Emergency Mode. Saves battery, shows your coordinates and numbers")
 
-                ToolTile(systemImage: "figure.fall", title: "Fall detection",
-                         subtitle: "Coming soon", tint: FlareColor.fire)
-                    .comingSoon()
+                Button {
+                    showFall = true
+                } label: {
+                    ToolTile(systemImage: "figure.fall", title: "Fall detection",
+                             subtitle: fall.isEnabled ? "On" : "Off",
+                             tint: fall.isEnabled ? FlareColor.ready : FlareColor.fire)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Fall detection. Currently \(fall.isEnabled ? "on" : "off")")
                 Button {
                     emergency.isActive = true
                 } label: {
@@ -201,5 +209,6 @@ struct ToolsSection: View {
                 .accessibilityLabel("SMS and satellite guidance. Opens Emergency Mode")
             }
         }
+        .sheet(isPresented: $showFall) { FallDetectionView() }
     }
 }

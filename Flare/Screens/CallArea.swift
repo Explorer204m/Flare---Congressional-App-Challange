@@ -9,6 +9,8 @@ struct CallArea: View {
 
     let onShowNumbers: () -> Void
     let onChooseLocation: () -> Void
+    /// Emergency Mode hides the "All numbers and details" link to keep the screen minimal.
+    var showsAllNumbersLink = true
 
     @State private var showOverflow = false
 
@@ -181,8 +183,10 @@ struct CallArea: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 4)
             }
-            LinkButton(title: "All numbers and details", action: onShowNumbers)
-                .frame(maxWidth: .infinity)
+            if showsAllNumbersLink {
+                LinkButton(title: "All numbers and details", action: onShowNumbers)
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 

@@ -1,0 +1,207 @@
+import SwiftUI
+import MessageUI
+import CoreLocation
+
+extension View {
+    /// Puts the fall alert over this view. `enabled` is false for a screen that sits under
+    /// another one that already shows it (for example under Emergency Mode).
+    func fallAlertOverlay(enabled: Bool = true) -> some View {
+        modifier(FallAlertOverlay(enabled: enabled))
+    }
+}
+
+struct FallAlertOverlay: ViewModifier {
+    let enabled: Bool
+    @ObservedObject private var fall = FallDetectionController.shared
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if enabled, let alert = fall.alert {
+                FallAlertView(alert: alert)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+/// "Did you fall?" with a countdown. Big buttons: I'm OK, call, send my location.
+struct FallAlertView: View {
+    let alert: FallAlert
+
+    @EnvironmentObject private var store: EmergencyStore
+    @EnvironmentObject private var medical: MedicalIDStore
+    @Environment(\.openURL) private var openURL
+    @ObservedObject private var fall = FallDetectionController.shared
+    @State private var showMessage = false
+
+    private var here: CLLocation? { store.location.latestFix }
+
+    /// The number to offer: the all-emergencies one, else ambulance, else the first that can be dialed.
+    private var callGroup: NumberGroup? {
+        let dialable = store.plan.groups.filter { $0.dialURL != nil }
+        return dialable.first(where: { $0.coversEverything })
+            ?? dialable.first(where: { $0.categories.contains(.medical) })
+            ?? dialable.first
+    }
+
+    private var ringFraction: Double {
+        Double(alert.secondsLeft) / Double(FallDetectionController.countdownSeconds)
+    }
+
+    var body: some View {
+        ZStack {
+            Color(hex: 0x14060A).ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    if alert.isTest { testBanner }
+
+                    Image(systemName: "figure.fall")
+                        .font(.system(size: 44, weight: .bold))
+                        .foregroundStyle(FlareColor.failure)
+                        .padding(.top, alert.isTest ? 0 : 24)
+                        .accessibilityHidden(true)
+
+                    Text(alert.timedOut ? "No response" : "Did you fall?")
+                        .font(.archivo(.extraBold, size: 34, relativeTo: .largeTitle))
+                        .foregroundStyle(FlareColor.text)
+
+                    Text(message)
+                        .font(.flareBody)
+                        .foregroundStyle(FlareColor.secondaryText)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if !alert.timedOut { countdownRing }
+
+                    okButton
+                    if !alert.isTest {
+                        callButton
+                        locationButton
+                    }
+                    if alert.isTest {
+                        Text("This is only a practice run. Nothing is called or sent.")
+                            .font(.flareSecondary)
+                            .foregroundStyle(FlareColor.secondaryText)
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+                .frame(maxWidth: .infinity)
+            }
+            .scrollIndicators(.hidden)
+        }
+        .preferredColorScheme(.dark)
+        .accessibilityAddTraits(.isModal)
+        .sheet(isPresented: $showMessage) {
+            if let here {
+                MessageComposer(
+                    recipients: medical.medicalID.contacts
+                        .filter { !$0.isBlank }
+                        .compactMap { Dialer.normalized($0.phone) },
+                    body: LocationMessage.body(for: here, placeName: store.selection?.title),
+                    onFinish: { showMessage = false })
+                    .ignoresSafeArea()
+            }
+        }
+    }
+
+    private var message: String {
+        if alert.timedOut {
+            return alert.isTest
+                ? "In a real alert, this is where Flare asks you to call for help."
+                : "Flare can't call for you. If you need help, call now."
+        }
+        return "Flare felt a hard impact and then no movement. If you're fine, tap I'm OK."
+    }
+
+    private var testBanner: some View {
+        Text("TEST")
+            .font(.archivo(.extraBold, size: 14, relativeTo: .caption))
+            .tracking(2)
+            .foregroundStyle(FlareColor.onFlare)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 28)
+            .background(Capsule().fill(FlareColor.warning))
+            .padding(.top, 24)
+    }
+
+    private var countdownRing: some View {
+        ZStack {
+            Circle().stroke(Color.white.opacity(0.12), lineWidth: 10)
+            Circle()
+                .trim(from: 0, to: ringFraction)
+                .stroke(FlareColor.failure, style: StrokeStyle(lineWidth: 10, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 1), value: alert.secondsLeft)
+            VStack(spacing: 0) {
+                Text("\(alert.secondsLeft)")
+                    .font(.archivo(.extraBold, size: 56, relativeTo: .largeTitle))
+                    .foregroundStyle(FlareColor.text)
+                    .monospacedDigit()
+                Text("seconds")
+                    .font(.flareSecondary)
+                    .foregroundStyle(FlareColor.secondaryText)
+            }
+        }
+        .frame(width: 168, height: 168)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(alert.secondsLeft) seconds left to answer")
+    }
+
+    private var okButton: some View {
+        Button {
+            fall.dismissAlert()
+        } label: {
+            Text(alert.isTest ? "End test" : "I'm OK")
+                .font(.archivo(.extraBold, size: 24, relativeTo: .title2))
+                .foregroundStyle(FlareColor.onFlare)
+                .frame(maxWidth: .infinity, minHeight: 68)
+                .background(Capsule().fill(FlareColor.ready))
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private var callButton: some View {
+        if let group = callGroup, let url = group.dialURL {
+            Button {
+                openURL(url)
+                fall.dismissAlert()
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "phone.fill")
+                    Text("Call \(group.displayNumber)")
+                }
+                .font(.archivo(.extraBold, size: 24, relativeTo: .title2))
+                .foregroundStyle(FlareColor.onFlare)
+                .frame(maxWidth: .infinity, minHeight: 68)
+                .background(Capsule().fill(FlareGradient.flare))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Call \(group.displayNumber), \(group.title)")
+        } else {
+            Text("No verified emergency number for this area. Use your phone's built-in emergency call.")
+                .font(.flareSecondary)
+                .foregroundStyle(FlareColor.warning)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @ViewBuilder
+    private var locationButton: some View {
+        if let here {
+            if MFMessageComposeViewController.canSendText() {
+                EmergencyPillButton(title: "Send my location by SMS", systemImage: "bubble.left") {
+                    showMessage = true
+                }
+            } else {
+                ShareLink(item: LocationMessage.body(for: here, placeName: store.selection?.title)) {
+                    EmergencyPillLabel(title: "Share my location", systemImage: "square.and.arrow.up")
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+}

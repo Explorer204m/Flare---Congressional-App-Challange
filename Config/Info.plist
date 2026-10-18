@@ -4,6 +4,8 @@
 <dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Flare uses your location to work out which country or state you are in, so it can show the right emergency numbers, and to find nearby hospitals, police stations, fire stations and pharmacies. Searching nearby places sends your approximate location to Apple Maps. Flare does not send your location to its own servers.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Flare uses the motion sensor to notice a hard fall, only while Fall detection is turned on and Flare is open. Motion readings stay on your phone and are never saved.</string>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>
