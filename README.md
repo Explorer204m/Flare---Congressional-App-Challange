@@ -31,7 +31,9 @@ Only the call area changes with the country. Numbers are grouped by the number i
 
 - One number for the area: the large round CALL button (for example 911).
 - Several numbers: one button per number, titled by the services that use it (for example Japan: 119 "Fire · Ambulance", 110 "Police", 118 "Rescue").
-- More than five numbers: the first five, plus "Show N more numbers".
+- A service with several numbers (for example five police numbers in Algeria, four in Togo): the dataset doesn't say which one is the main one, and they are often different units (gendarmerie, mobile police, anti-terrorist police). Flare does **not** pick one for the big button. That service gets a single "Police: 5 numbers, choose one" button that opens a list naming each number by its unit, each with its own Call button. Ambulance, police and fire therefore always stay visible at a glance. A service with exactly one number stays one tap. The fall alert follows the same rule.
+- Order: all-emergencies numbers, then ambulance, police, fire, rescue (coast guard, mountain rescue and so on). Rescue follows the same rule: one number is one tap, several become one "Rescue: 2 numbers" button. Anything else sits under them when there is room (five rows in total), otherwise behind "Show N more numbers".
+- In this dataset release 47 areas (46 countries) have a service with several numbers. Once the database records a verified main number for these, it can become the one-tap button with the rest listed under it. Until then the list is the safe choice.
 - Police, fire or ambulance with no verified number (and no all-emergencies number): a note says so.
 - No verified number at all (for example Canada in this release): the screen says so and points to the phone's built-in emergency call. **No number is ever invented or borrowed from another country.**
 - "All numbers and details" lists every number (including poison and crisis lines, SMS and web contacts) with the area it covers, notes, hours (unknown shows "Hours not confirmed", never 24/7) and the date it was last confirmed.

@@ -13,6 +13,7 @@ struct CallArea: View {
     var showsAllNumbersLink = true
 
     @State private var showOverflow = false
+    @State private var chosen: ServiceSlot?
 
     private let builtInNote = "In an emergency you can also use your phone's built-in emergency call feature."
 
@@ -21,6 +22,9 @@ struct CallArea: View {
             content
         }
         .frame(maxWidth: .infinity)
+        .sheet(item: $chosen) { slot in
+            NumberChooserSheet(slot: slot)
+        }
     }
 
     @ViewBuilder
@@ -101,7 +105,10 @@ struct CallArea: View {
 
     // MARK: Several numbers
 
-    private var multipleCaption: String {
+    private func caption(for layout: CallLayout) -> String {
+        if layout.hasChoice {
+            return "Some services have more than one number here. Tap one to see them and pick the one you need."
+        }
         let allCoverEverything = store.plan.groups.allSatisfy { $0.coversEverything }
         return allCoverEverything
             ? "Any of these numbers reaches emergency services here. Tap to call."
@@ -109,20 +116,30 @@ struct CallArea: View {
     }
 
     private var multipleNumbers: some View {
-        VStack(spacing: 12) {
-            Text(multipleCaption)
+        let layout = store.plan.layout
+        return VStack(spacing: 12) {
+            Text(caption(for: layout))
                 .font(.flareSecondary)
                 .foregroundStyle(FlareColor.secondaryText)
                 .multilineTextAlignment(.center)
                 .padding(.bottom, 4)
 
-            ForEach(store.plan.visibleGroups) { group in
+            ForEach(layout.main) { entry in
+                switch entry {
+                case .number(let group):
+                    numberButton(group)
+                case .choice(let slot):
+                    ServiceChoiceButton(slot: slot) { chosen = slot }
+                }
+            }
+
+            ForEach(layout.inline) { group in
                 numberButton(group)
             }
 
-            if !store.plan.overflowGroups.isEmpty {
+            if !layout.overflow.isEmpty {
                 if showOverflow {
-                    ForEach(store.plan.overflowGroups) { group in
+                    ForEach(layout.overflow) { group in
                         numberButton(group)
                     }
                 }
@@ -131,7 +148,7 @@ struct CallArea: View {
                 } label: {
                     Text(showOverflow
                          ? "Show fewer numbers"
-                         : "Show \(store.plan.overflowGroups.count) more numbers")
+                         : "Show \(layout.overflow.count) more numbers")
                         .font(.flareBody)
                         .foregroundStyle(FlareColor.link)
                         .frame(maxWidth: .infinity, minHeight: 44)

@@ -150,15 +150,7 @@ struct ServiceCallButton: View {
 
     private var foreground: Color { FlareGradient.buttonForeground(for: group.tint) }
 
-    private var iconName: String {
-        switch group.tint {
-        case .allPurpose: return "exclamationmark.triangle.fill"
-        case .ambulance: return "cross.fill"
-        case .police: return "shield.fill"
-        case .fire: return "flame.fill"
-        case .rescue: return "lifepreserver.fill"
-        }
-    }
+    private var iconName: String { group.tint.iconName }
 
     var body: some View {
         Button(action: action) {
@@ -199,6 +191,62 @@ struct ServiceCallButton: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Call \(group.displayNumber), \(group.title)")
+    }
+}
+
+extension CallTint {
+    var iconName: String {
+        switch self {
+        case .allPurpose: return "exclamationmark.triangle.fill"
+        case .ambulance: return "cross.fill"
+        case .police: return "shield.fill"
+        case .fire: return "flame.fill"
+        case .rescue: return "lifepreserver.fill"
+        }
+    }
+}
+
+/// A service with several numbers: one button that opens the list instead of guessing one.
+struct ServiceChoiceButton: View {
+    let slot: ServiceSlot
+    let action: () -> Void
+
+    private var foreground: Color { FlareGradient.buttonForeground(for: slot.tint) }
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 14) {
+                ZStack {
+                    Circle().fill(foreground.opacity(0.18))
+                    Image(systemName: slot.tint.iconName)
+                        .font(.system(size: 20, weight: .bold))
+                }
+                .frame(width: 44, height: 44)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(slot.title)
+                        .font(.flareBodyLarge)
+                    Text("\(slot.groups.count) numbers \u{00B7} choose one")
+                        .font(.flareCaption)
+                        .opacity(0.85)
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right.circle.fill")
+                    .font(.system(size: 30, weight: .bold))
+            }
+            .foregroundStyle(foreground)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 76)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(FlareGradient.buttonGradient(for: slot.tint))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(slot.title), \(slot.groups.count) numbers")
+        .accessibilityHint("Opens a list to choose the number from")
     }
 }
 

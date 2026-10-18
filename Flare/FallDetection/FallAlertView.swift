@@ -33,15 +33,32 @@ struct FallAlertView: View {
     @Environment(\.openURL) private var openURL
     @ObservedObject private var fall = FallDetectionController.shared
     @State private var showMessage = false
+    @State private var chooser: ServiceSlot?
 
     private var here: CLLocation? { store.location.latestFix }
 
-    /// The number to offer: the all-emergencies one, else ambulance, else the first that can be dialed.
-    private var callGroup: NumberGroup? {
-        let dialable = store.plan.groups.filter { $0.dialURL != nil }
-        return dialable.first(where: { $0.coversEverything })
-            ?? dialable.first(where: { $0.categories.contains(.medical) })
-            ?? dialable.first
+    private enum CallTarget {
+        case dial(NumberGroup)
+        case choose(ServiceSlot)
+    }
+
+    /// What the call button does: the all-emergencies number if there is one, otherwise the
+    /// ambulance number. If the dataset lists several for that service, Flare doesn't guess:
+    /// the button opens the list. Police and fire are only used when there is no ambulance number.
+    private var callTarget: CallTarget? {
+        let groups = store.plan.groups
+        if let general = groups.first(where: { $0.coversEverything && $0.dialURL != nil }) {
+            return .dial(general)
+        }
+        for category in [ServiceCategory.medical, .police, .fire] {
+            let candidates = groups.filter { !$0.coversEverything && $0.categories.contains(category) }
+            if candidates.isEmpty { continue }
+            if candidates.count == 1, let only = candidates.first, only.dialURL != nil {
+                return .dial(only)
+            }
+            return .choose(ServiceSlot(category: category, groups: candidates))
+        }
+        return nil
     }
 
     private var ringFraction: Double {
@@ -164,23 +181,44 @@ struct FallAlertView: View {
 
     @ViewBuilder
     private var callButton: some View {
-        if let group = callGroup, let url = group.dialURL {
+        switch callTarget {
+        case .dial(let group):
+            if let url = group.dialURL {
+                Button {
+                    openURL(url)
+                    fall.dismissAlert()
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "phone.fill")
+                        Text("Call \(group.displayNumber)")
+                    }
+                    .font(.archivo(.extraBold, size: 24, relativeTo: .title2))
+                    .foregroundStyle(FlareColor.onFlare)
+                    .frame(maxWidth: .infinity, minHeight: 68)
+                    .background(Capsule().fill(FlareGradient.flare))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Call \(group.displayNumber), \(group.title)")
+            }
+        case .choose(let slot):
             Button {
-                openURL(url)
-                fall.dismissAlert()
+                chooser = slot
             } label: {
                 HStack(spacing: 12) {
                     Image(systemName: "phone.fill")
-                    Text("Call \(group.displayNumber)")
+                    Text("Choose \(slot.title.lowercased()) number")
                 }
-                .font(.archivo(.extraBold, size: 24, relativeTo: .title2))
+                .font(.archivo(.extraBold, size: 22, relativeTo: .title2))
                 .foregroundStyle(FlareColor.onFlare)
                 .frame(maxWidth: .infinity, minHeight: 68)
                 .background(Capsule().fill(FlareGradient.flare))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Call \(group.displayNumber), \(group.title)")
-        } else {
+            .accessibilityHint("Several numbers are listed. Opens the list to choose from")
+            .sheet(item: $chooser) { slot in
+                NumberChooserSheet(slot: slot)
+            }
+        case nil:
             Text("No verified emergency number for this area. Use your phone's built-in emergency call.")
                 .font(.flareSecondary)
                 .foregroundStyle(FlareColor.warning)
