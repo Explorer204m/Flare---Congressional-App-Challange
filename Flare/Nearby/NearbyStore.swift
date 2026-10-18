@@ -34,6 +34,9 @@ final class NearbyStore: ObservableObject {
     private var cache: NearbyCache
     private var lastSearchCenter: CLLocation?
     private var searchTask: Task<Void, Never>?
+    /// "Try again" was tapped and a new GPS position was asked for: search as soon as it arrives.
+    private var searchOnNextFix = false
+    private var fixWaitTask: Task<Void, Never>?
 
     private static let usedKey = "flare.nearby.used.v1"
     nonisolated private static let radii: [CLLocationDistance] = [5_000, 20_000, 60_000]
@@ -56,6 +59,12 @@ final class NearbyStore: ObservableObject {
 
     func updateFix(_ newFix: CLLocation) {
         fix = newFix
+        if searchOnNextFix {
+            searchOnNextFix = false
+            fixWaitTask?.cancel()
+            refreshIfNeeded(force: true)
+            return
+        }
         if hasUsedNearby { refreshIfNeeded(force: false) }
     }
 
@@ -65,8 +74,23 @@ final class NearbyStore: ObservableObject {
         refreshIfNeeded(force: false)
     }
 
-    func refresh() {
-        refreshIfNeeded(force: true)
+    /// Searches again. With `awaitingNewFix` the search waits (up to 8 seconds) for the fresh
+    /// GPS position the caller has just asked for, so it is centred on where the person is now;
+    /// if none arrives it searches around the last known position.
+    func refresh(awaitingNewFix: Bool = false) {
+        fixWaitTask?.cancel()
+        guard awaitingNewFix else {
+            searchOnNextFix = false
+            refreshIfNeeded(force: true)
+            return
+        }
+        searchOnNextFix = true
+        fixWaitTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled, let self, self.searchOnNextFix else { return }
+            self.searchOnNextFix = false
+            self.refreshIfNeeded(force: true)
+        }
     }
 
     // MARK: Results

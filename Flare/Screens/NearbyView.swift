@@ -9,6 +9,10 @@ struct NearbyView: View {
     @EnvironmentObject private var store: EmergencyStore
     @EnvironmentObject private var nearby: NearbyStore
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// While the Map tab is on screen, Flare asks for a fresh GPS position this often.
+    private static let followInterval: Duration = .seconds(60)
 
     enum Mode: String { case map, compass }
 
@@ -66,6 +70,15 @@ struct NearbyView: View {
             if nearby.fix == nil, let fix = store.location.latestFix { nearby.updateFix(fix) }
             nearby.activate()
             frameMap()
+        }
+        // A fresh position when the tab opens, then once a minute while it stays open
+        // and Flare is in the foreground. Stops by itself when the tab or app is left.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            while !Task.isCancelled {
+                store.location.requestFix()
+                try? await Task.sleep(for: Self.followInterval)
+            }
         }
         .onChange(of: placesKey) { _, _ in frameMap() }
         .onChange(of: nearby.selectedKind) { _, _ in
@@ -146,7 +159,7 @@ struct NearbyView: View {
                 systemImage: "wifi.slash",
                 message: savedMessage) {
                 HStack(spacing: 20) {
-                    LinkButton(title: "Try again") { nearby.refresh() }
+                    LinkButton(title: "Try again") { searchAgain() }
                     if mode == .map {
                         LinkButton(title: "Open compass") { mode = .compass }
                     }
@@ -246,7 +259,7 @@ struct NearbyView: View {
             message: nearby.searchFailed
                 ? "No saved \(kind.title.lowercased()) near here. Flare will not guess. For an emergency, use the numbers on Home."
                 : "Apple Maps found no \(kind.title.lowercased()) within about 60 km, and none are saved near here. For an emergency, use the numbers on Home.") {
-            LinkButton(title: "Search again") { nearby.refresh() }
+            LinkButton(title: "Search again") { searchAgain() }
         }
     }
 
@@ -278,6 +291,13 @@ struct NearbyView: View {
             center: place.coordinate,
             span: MKCoordinateSpan(latitudeDelta: 0.02, longitudeDelta: 0.02))
         withAnimation { position = .region(region) }
+    }
+
+    /// Asks for a new GPS position and searches around it (or around the last one if GPS can't answer).
+    private func searchAgain() {
+        let canLocate = store.location.isAuthorized
+        nearby.refresh(awaitingNewFix: canLocate)
+        store.location.requestFix()
     }
 
     /// Fits the camera around the person and the nearest few places.
