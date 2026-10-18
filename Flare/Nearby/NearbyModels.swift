@@ -5,8 +5,14 @@ import CoreLocation
 /// The kinds of place the Nearby tab looks for.
 enum NearbyKind: String, CaseIterable, Identifiable, Codable {
     case hospital, police, fire, pharmacy
+    /// For pets. Kept out of "Closest 4" and the Home tiles, which are for people.
+    case vet
 
     var id: String { rawValue }
+
+    var isForPeople: Bool { self != .vet }
+
+    static var peopleKinds: [NearbyKind] { allCases.filter { $0.isForPeople } }
 
     var title: String {
         switch self {
@@ -14,6 +20,7 @@ enum NearbyKind: String, CaseIterable, Identifiable, Codable {
         case .police: return "Police"
         case .fire: return "Fire station"
         case .pharmacy: return "Pharmacy"
+        case .vet: return "Emergency vet"
         }
     }
 
@@ -24,6 +31,7 @@ enum NearbyKind: String, CaseIterable, Identifiable, Codable {
         case .police: return "Police near you"
         case .fire: return "Fire stations near you"
         case .pharmacy: return "Pharmacies near you"
+        case .vet: return "Emergency vets near you"
         }
     }
 
@@ -33,6 +41,7 @@ enum NearbyKind: String, CaseIterable, Identifiable, Codable {
         case .police: return "shield.fill"
         case .fire: return "flame.fill"
         case .pharmacy: return "pills.fill"
+        case .vet: return "pawprint.fill"
         }
     }
 
@@ -42,15 +51,74 @@ enum NearbyKind: String, CaseIterable, Identifiable, Codable {
         case .police: return FlareColor.police
         case .fire: return FlareColor.fire
         case .pharmacy: return FlareColor.pharmacy
+        case .vet: return FlareColor.vet
         }
     }
 
-    var category: MKPointOfInterestCategory {
+    /// The Apple Maps category searched for. Vets have none that works on every supported
+    /// iOS version, so they are found with a text search instead.
+    var category: MKPointOfInterestCategory? {
         switch self {
         case .hospital: return .hospital
         case .police: return .police
         case .fire: return .fireStation
         case .pharmacy: return .pharmacy
+        case .vet: return nil
+        }
+    }
+}
+
+/// What the Map tab is showing: the closest few places of any kind, or one kind of place.
+enum NearbyScope: Hashable, Identifiable {
+    case closest
+    case kind(NearbyKind)
+
+    /// How many places the "Closest" tab shows.
+    static let closestCount = 4
+
+    static let all: [NearbyScope] = [.closest] + NearbyKind.allCases.map { NearbyScope.kind($0) }
+
+    var id: String {
+        switch self {
+        case .closest: return "closest"
+        case .kind(let kind): return kind.rawValue
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .closest: return "Closest \(Self.closestCount)"
+        case .kind(let kind): return kind.title
+        }
+    }
+
+    /// Heading above the list of results.
+    var listTitle: String {
+        switch self {
+        case .closest: return "The \(Self.closestCount) closest to you"
+        case .kind(let kind): return kind.listTitle
+        }
+    }
+
+    /// For sentences such as "No saved places near here".
+    var noun: String {
+        switch self {
+        case .closest: return "places"
+        case .kind(let kind): return kind.title.lowercased()
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .closest: return "mappin.and.ellipse"
+        case .kind(let kind): return kind.systemImage
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .closest: return FlareColor.link
+        case .kind(let kind): return kind.tint
         }
     }
 }

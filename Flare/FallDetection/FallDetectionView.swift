@@ -113,6 +113,7 @@ struct FallDetectionView: View {
             bullet("Experimental. It can miss a fall, and it can raise a false alarm, for example when the phone is dropped and lies still.")
             bullet("It only works while Flare is open and the screen is on. iPhones pause apps in the background, so it can't watch while the phone is locked or in your pocket with Flare closed. Emergency Mode's \u{201C}Keep the screen on\u{201D} switch helps for longer watches.")
             bullet("Flare can't call or text for you. iPhones need a tap for both, so someone who can't move won't have help sent automatically.")
+            bullet("Flare also can't play a recorded message into a phone call: iPhones don't let apps do that. Apple's own Crash Detection and Apple Watch fall detection can place the call and speak for you, and Flare can't. Instead, if you don't answer, the alert shows a card telling anyone nearby what happened, where you are and how to reach your contacts, and the location text says you may not be able to talk.")
             bullet("The alarm sound follows the ringer switch. Vibration plays either way.")
             bullet("Apple Watch has its own fall detection that works in the background. Flare's is separate and doesn't replace it.")
         }

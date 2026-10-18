@@ -1,11 +1,11 @@
 import SwiftUI
 import CoreLocation
 
-/// Points to the nearest place of the chosen kind using only GPS and the compass:
+/// Points to the nearest place of the chosen kind (or of any kind) using only GPS and the compass:
 /// no map tiles and no connection. It works from live results when online and from
 /// saved places when offline. The direction is a straight line, not a route.
 struct CompassView: View {
-    let kind: NearbyKind
+    let scope: NearbyScope
 
     @EnvironmentObject private var nearby: NearbyStore
     @StateObject private var compass = CompassService()
@@ -14,7 +14,7 @@ struct CompassView: View {
     /// Best position we have: live compass updates, else the last one-off fix.
     private var here: CLLocation? { compass.location ?? nearby.fix }
 
-    private var result: NearbyStore.Result { nearby.result(for: kind) }
+    private var result: NearbyStore.Result { nearby.result(in: scope) }
 
     /// Candidates sorted by distance from where the person is right now.
     private var candidates: [NearbyPlace] {
@@ -35,13 +35,13 @@ struct CompassView: View {
             } else {
                 NoticeCard(
                     systemImage: "location.north.line.fill",
-                    message: "No \(kind.title.lowercased()) is saved near you, so there is nothing to point to. Open the Map view while you have a connection and Flare will save nearby places for later.",
+                    message: "No \(scope.noun) is saved near you, so there is nothing to point to. Open the Map view while you have a connection and Flare will save nearby places for later.",
                     tint: FlareColor.link) { EmptyView() }
             }
         }
         .onAppear { compass.start() }
         .onDisappear { compass.stop() }
-        .onChange(of: kind) { _, _ in chosenID = nil }
+        .onChange(of: scope) { _, _ in chosenID = nil }
     }
 
     // MARK: Guide
@@ -97,6 +97,9 @@ struct CompassView: View {
                     .foregroundStyle(FlareColor.text)
                     .minimumScaleFactor(0.5)
                     .lineLimit(1)
+                Text(place.kind.title)
+                    .font(.flareCaption)
+                    .foregroundStyle(place.kind.tint)
                 Text(place.name)
                     .font(.flareBodyLarge)
                     .foregroundStyle(FlareColor.text)
@@ -106,7 +109,7 @@ struct CompassView: View {
                         .font(.flareSecondary)
                         .foregroundStyle(FlareColor.secondaryText)
                 }
-                if result.source == .saved {
+                if result.savedKinds.contains(place.kind) {
                     Text("Saved \(place.savedAt.formatted(date: .abbreviated, time: .omitted))")
                         .font(.flareCaption)
                         .foregroundStyle(FlareColor.warning)
@@ -154,10 +157,15 @@ struct CompassView: View {
                         chosenID = place.id
                     } label: {
                         HStack {
-                            Text(place.name)
-                                .font(.flareBody)
-                                .foregroundStyle(FlareColor.text)
-                                .multilineTextAlignment(.leading)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(place.name)
+                                    .font(.flareBody)
+                                    .foregroundStyle(FlareColor.text)
+                                    .multilineTextAlignment(.leading)
+                                Text(place.kind.title)
+                                    .font(.flareCaption)
+                                    .foregroundStyle(place.kind.tint)
+                            }
                             Spacer(minLength: 8)
                             Text(Geo.distanceText(place.distance(from: here)))
                                 .font(.flareBody)

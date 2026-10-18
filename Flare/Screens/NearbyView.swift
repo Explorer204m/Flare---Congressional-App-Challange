@@ -21,14 +21,14 @@ struct NearbyView: View {
     @State private var showAllPlaces = false
     @State private var confirmClear = false
 
-    private var kind: NearbyKind { nearby.selectedKind }
-    private var result: NearbyStore.Result { nearby.result(for: kind) }
+    private var scope: NearbyScope { nearby.selectedScope }
+    private var result: NearbyStore.Result { nearby.result(in: scope) }
     private var places: [NearbyPlace] { result.places }
     private var visiblePlaces: [NearbyPlace] { showAllPlaces ? places : Array(places.prefix(6)) }
 
     /// Changes whenever the set of shown places changes, to re-frame the map.
     private var placesKey: String {
-        kind.rawValue + places.prefix(4).map(\.id).joined(separator: ",")
+        scope.id + places.prefix(4).map(\.id).joined(separator: ",")
     }
 
     var body: some View {
@@ -53,9 +53,10 @@ struct NearbyView: View {
                     findingLocation
                 } else {
                     statusBanner
+                    if scope == .kind(.vet) { vetNotice }
                     switch mode {
                     case .map: mapContent
-                    case .compass: CompassView(kind: kind)
+                    case .compass: CompassView(scope: scope)
                     }
                 }
 
@@ -81,7 +82,7 @@ struct NearbyView: View {
             }
         }
         .onChange(of: placesKey) { _, _ in frameMap() }
-        .onChange(of: nearby.selectedKind) { _, _ in
+        .onChange(of: nearby.selectedScope) { _, _ in
             nearby.selectedPlaceID = nil
             showAllPlaces = false
         }
@@ -99,10 +100,10 @@ struct NearbyView: View {
     private var kindChips: some View {
         ScrollView(.horizontal) {
             HStack(spacing: 10) {
-                ForEach(NearbyKind.allCases) { option in
-                    let selected = option == kind
+                ForEach(NearbyScope.all) { option in
+                    let selected = option == scope
                     Button {
-                        nearby.selectedKind = option
+                        nearby.selectedScope = option
                     } label: {
                         HStack(spacing: 8) {
                             Image(systemName: option.systemImage)
@@ -131,6 +132,14 @@ struct NearbyView: View {
     }
 
     // MARK: Status
+
+    /// Apple Maps gives no opening hours, and pet emergencies don't go through 911 / 112.
+    private var vetNotice: some View {
+        NoticeCard(
+            systemImage: "pawprint.fill",
+            message: "These are vets and animal clinics near you. Flare can't tell which ones treat emergencies or are open 24 hours, so call first. In most places 911, 112 and similar numbers don't send help for pets: call the vet directly.",
+            tint: FlareColor.vet) { EmptyView() }
+    }
 
     private var deniedNotice: some View {
         NoticeCard(
@@ -182,7 +191,7 @@ struct NearbyView: View {
         } else if !places.isEmpty {
             NoticeCard(
                 systemImage: "tray.full.fill",
-                message: "Apple Maps found no \(kind.title.lowercased()) nearby just now, so these are places saved from earlier searches.",
+                message: "Apple Maps found no \(scope.noun) nearby just now, so these are places saved from earlier searches.",
                 tint: FlareColor.link) { EmptyView() }
         }
     }
@@ -201,8 +210,8 @@ struct NearbyView: View {
         Map(position: $position, selection: $nearby.selectedPlaceID) {
             UserAnnotation()
             ForEach(places) { place in
-                Marker(place.name, systemImage: kind.systemImage, coordinate: place.coordinate)
-                    .tint(kind.tint)
+                Marker(place.name, systemImage: place.kind.systemImage, coordinate: place.coordinate)
+                    .tint(place.kind.tint)
                     .tag(place.id)
             }
         }
@@ -232,7 +241,7 @@ struct NearbyView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 10) {
-                Text(kind.listTitle)
+                Text(scope.listTitle)
                     .font(.flareSection)
                     .foregroundStyle(FlareColor.text)
 
@@ -240,7 +249,8 @@ struct NearbyView: View {
                     PlaceCard(
                         place: place,
                         from: nearby.fix,
-                        showsSavedDate: result.source == .saved,
+                        showsSavedDate: result.savedKinds.contains(place.kind),
+                        showsKind: scope == .closest,
                         isSelected: nearby.selectedPlaceID == place.id,
                         onSelect: { select(place) })
                 }
@@ -257,8 +267,8 @@ struct NearbyView: View {
         NoticeCard(
             systemImage: "magnifyingglass",
             message: nearby.searchFailed
-                ? "No saved \(kind.title.lowercased()) near here. Flare will not guess. For an emergency, use the numbers on Home."
-                : "Apple Maps found no \(kind.title.lowercased()) within about 60 km, and none are saved near here. For an emergency, use the numbers on Home.") {
+                ? "No saved \(scope.noun) near here. Flare will not guess. For an emergency, use the numbers on Home."
+                : "Apple Maps found no \(scope.noun) within about 60 km, and none are saved near here. For an emergency, use the numbers on Home.") {
             LinkButton(title: "Search again") { searchAgain() }
         }
     }
@@ -323,6 +333,8 @@ struct PlaceCard: View {
     let place: NearbyPlace
     let from: CLLocation?
     let showsSavedDate: Bool
+    /// Shows the kind ("Hospital", "Pharmacy") above the name, for lists that mix kinds.
+    var showsKind = false
     let isSelected: Bool
     let onSelect: () -> Void
 
@@ -352,6 +364,11 @@ struct PlaceCard: View {
                     .frame(width: 44, height: 44)
 
                     VStack(alignment: .leading, spacing: 2) {
+                        if showsKind {
+                            Text(place.kind.title)
+                                .font(.flareCaption)
+                                .foregroundStyle(place.kind.tint)
+                        }
                         Text(place.name)
                             .font(.flareBodyLarge)
                             .foregroundStyle(FlareColor.text)

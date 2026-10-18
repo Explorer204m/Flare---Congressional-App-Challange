@@ -10,10 +10,23 @@ enum LocationMessage {
         String(format: "%.5f, %.5f", location.coordinate.latitude, location.coordinate.longitude)
     }
 
-    static func body(for location: CLLocation, placeName: String?, now: Date = Date()) -> String {
+    enum Reason {
+        case help
+        /// Sent from the fall alert: the person may not be able to talk.
+        case fall
+    }
+
+    static func body(for location: CLLocation, placeName: String?,
+                     reason: Reason = .help, now: Date = Date()) -> String {
         let lat = String(format: "%.5f", location.coordinate.latitude)
         let lon = String(format: "%.5f", location.coordinate.longitude)
-        var lines = ["I need help. This is my location:"]
+        var lines: [String]
+        switch reason {
+        case .help:
+            lines = ["I need help. This is my location:"]
+        case .fall:
+            lines = ["Flare detected that I may have fallen. I may not be able to talk or answer. Please call emergency services or come to this location:"]
+        }
         lines.append("\(lat), \(lon) (accuracy about \(Int(max(location.horizontalAccuracy, 1).rounded())) m)")
         let minutes = Int(now.timeIntervalSince(location.timestamp) / 60)
         if minutes >= 2 { lines.append("This position is from \(minutes) minutes ago.") }

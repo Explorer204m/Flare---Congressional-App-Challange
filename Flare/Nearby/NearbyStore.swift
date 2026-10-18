@@ -19,9 +19,11 @@ final class NearbyStore: ObservableObject {
     struct Result {
         var places: [NearbyPlace]
         var source: Source
+        /// Kinds whose places here come from the saved copy, not a live search.
+        var savedKinds: Set<NearbyKind> = []
     }
 
-    @Published var selectedKind: NearbyKind = .hospital
+    @Published var selectedScope: NearbyScope = .closest
     @Published var selectedPlaceID: String?
     @Published private(set) var fix: CLLocation?
     @Published private(set) var live: [NearbyKind: [NearbyPlace]] = [:]
@@ -103,7 +105,36 @@ final class NearbyStore: ObservableObject {
                           source: .live(liveAt ?? Date()))
         }
         let saved = cache.nearest(kind, to: fix, within: Self.savedRadius, limit: Self.resultLimit)
-        return Result(places: saved, source: .saved)
+        return Result(places: saved, source: .saved, savedKinds: saved.isEmpty ? [] : [kind])
+    }
+
+    /// Either one kind, or the closest few places of any kind mixed together.
+    /// A kind with no live results falls back to its saved places, and each place says which it is.
+    func result(in scope: NearbyScope) -> Result {
+        switch scope {
+        case .kind(let kind):
+            var single = result(for: kind)
+            if single.source == .saved && !single.places.isEmpty { single.savedKinds = [kind] }
+            return single
+        case .closest:
+            guard let fix else { return Result(places: [], source: .saved) }
+            // Only the kinds for people: a vet should never push a hospital out of the closest 4.
+            let parts = NearbyKind.peopleKinds.map { result(for: $0) }
+            let nearest = parts
+                .flatMap { $0.places }
+                .sorted { $0.distance(from: fix) < $1.distance(from: fix) }
+                .prefix(NearbyScope.closestCount)
+            let shown = Set(nearest.map { $0.kind })
+            let saved = parts.reduce(into: Set<NearbyKind>()) { $0.formUnion($1.savedKinds) }
+                .intersection(shown)
+            let hasLive = parts.contains { part in
+                if case .live = part.source, !part.places.isEmpty { return true }
+                return false
+            }
+            return Result(places: Array(nearest),
+                          source: hasLive ? .live(liveAt ?? Date()) : .saved,
+                          savedKinds: saved)
+        }
     }
 
     func nearestDistance(for kind: NearbyKind) -> CLLocationDistance? {
@@ -169,17 +200,30 @@ final class NearbyStore: ObservableObject {
 
     nonisolated private static func searchPlaces(kind: NearbyKind,
                                                  around center: CLLocationCoordinate2D) async throws -> [NearbyPlace] {
+        let origin = CLLocation(latitude: center.latitude, longitude: center.longitude)
         for radius in radii {
-            let request = MKLocalPointsOfInterestRequest(center: center, radius: radius)
-            request.pointOfInterestFilter = MKPointOfInterestFilter(including: [kind.category])
             do {
-                let response = try await MKLocalSearch(request: request).start()
+                let items: [MKMapItem]
+                if let category = kind.category {
+                    let request = MKLocalPointsOfInterestRequest(center: center, radius: radius)
+                    request.pointOfInterestFilter = MKPointOfInterestFilter(including: [category])
+                    items = try await MKLocalSearch(request: request).start().mapItems
+                } else {
+                    // Vets: a text search, limited to places inside this radius.
+                    let request = MKLocalSearch.Request()
+                    request.naturalLanguageQuery = "emergency veterinarian"
+                    request.region = MKCoordinateRegion(center: center,
+                                                        latitudinalMeters: radius * 2,
+                                                        longitudinalMeters: radius * 2)
+                    request.resultTypes = .pointOfInterest
+                    items = try await MKLocalSearch(request: request).start().mapItems
+                }
                 let now = Date()
                 var seen = Set<String>()
-                let origin = CLLocation(latitude: center.latitude, longitude: center.longitude)
-                let places = response.mapItems
+                let places = items
                     .compactMap { NearbyPlace(item: $0, kind: kind, savedAt: now) }
                     .filter { seen.insert($0.id).inserted }
+                    .filter { kind.category != nil || $0.distance(from: origin) <= radius }
                     .sorted { $0.distance(from: origin) < $1.distance(from: origin) }
                 if !places.isEmpty { return Array(places.prefix(resultLimit)) }
             } catch let error as MKError where error.code == .placemarkNotFound {

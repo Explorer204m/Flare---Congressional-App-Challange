@@ -34,6 +34,7 @@ struct FallAlertView: View {
     @ObservedObject private var fall = FallDetectionController.shared
     @State private var showMessage = false
     @State private var chooser: ServiceSlot?
+    @State private var showMedical = false
 
     private var here: CLLocation? { store.location.latestFix }
 
@@ -96,6 +97,7 @@ struct FallAlertView: View {
                         callButton
                         locationButton
                     }
+                    if alert.timedOut { helperCard }
                     if alert.isTest {
                         Text("This is only a practice run. Nothing is called or sent.")
                             .font(.flareSecondary)
@@ -116,11 +118,69 @@ struct FallAlertView: View {
                     recipients: medical.medicalID.contacts
                         .filter { !$0.isBlank }
                         .compactMap { Dialer.normalized($0.phone) },
-                    body: LocationMessage.body(for: here, placeName: store.selection?.title),
+                    body: LocationMessage.body(for: here, placeName: store.selection?.title, reason: .fall),
                     onFinish: { showMessage = false })
                     .ignoresSafeArea()
             }
         }
+    }
+
+    /// Shown once nobody has answered: tells anyone nearby what is going on and what to do.
+    private var helperCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("If you are helping", systemImage: "person.2.fill")
+                .font(.flareSection)
+                .foregroundStyle(FlareColor.text)
+            Text("This person may have fallen and may not be able to talk. Please call the emergency number, tell them where you are, and stay with the person.")
+                .font(.flareSecondary)
+                .foregroundStyle(FlareColor.text)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let here {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Where we are")
+                        .font(.flareCaption)
+                        .foregroundStyle(FlareColor.secondaryText)
+                    Text(LocationMessage.coordinateText(here))
+                        .font(.archivo(.extraBold, size: 22, relativeTo: .title3))
+                        .foregroundStyle(FlareColor.text)
+                        .minimumScaleFactor(0.6)
+                        .lineLimit(1)
+                    if let code = PlusCode.encode(latitude: here.coordinate.latitude,
+                                                  longitude: here.coordinate.longitude) {
+                        Text("Plus Code \(code)")
+                            .font(.flareBody)
+                            .foregroundStyle(FlareColor.text)
+                    }
+                    if let place = store.selection?.title {
+                        Text("Near \(place)")
+                            .font(.flareCaption)
+                            .foregroundStyle(FlareColor.secondaryText)
+                    }
+                    Text("Position saved \(here.timestamp, style: .relative) ago")
+                        .font(.flareCaption)
+                        .foregroundStyle(FlareColor.secondaryText)
+                }
+            }
+
+            Button {
+                showMedical = true
+            } label: {
+                Label("Medical ID and contacts", systemImage: "person.text.rectangle")
+                    .font(.flareBodyLarge)
+                    .foregroundStyle(FlareColor.link)
+                    .frame(maxWidth: .infinity, minHeight: 48)
+                    .overlay(Capsule().stroke(FlareColor.link.opacity(0.6), lineWidth: 1.5))
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showMedical) {
+                EmergencyMedicalView(contacts: medical.medicalID.contacts.filter { !$0.isBlank })
+                    .environmentObject(medical)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .cardSurface()
     }
 
     private var message: String {
@@ -235,7 +295,7 @@ struct FallAlertView: View {
                     showMessage = true
                 }
             } else {
-                ShareLink(item: LocationMessage.body(for: here, placeName: store.selection?.title)) {
+                ShareLink(item: LocationMessage.body(for: here, placeName: store.selection?.title, reason: .fall)) {
                     EmergencyPillLabel(title: "Share my location", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.plain)

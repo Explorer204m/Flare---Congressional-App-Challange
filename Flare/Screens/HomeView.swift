@@ -154,9 +154,9 @@ struct NearbySection: View {
         VStack(spacing: 12) {
             SectionHeader(title: "Nearby", actionTitle: "Open map", action: openMap)
             LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(NearbyKind.allCases) { kind in
+                ForEach(NearbyKind.peopleKinds) { kind in
                     Button {
-                        nearby.selectedKind = kind
+                        nearby.selectedScope = .kind(kind)
                         openMap()
                     } label: {
                         FeatureTile(systemImage: kind.systemImage, title: kind.title,

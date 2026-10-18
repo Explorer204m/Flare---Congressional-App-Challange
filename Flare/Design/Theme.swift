@@ -38,6 +38,7 @@ enum FlareColor {
     static let police = Color(hex: 0x9CC3FF)
     static let fire = Color(hex: 0xFFC070)
     static let pharmacy = Color(hex: 0x6EF0DC)
+    static let vet = Color(hex: 0xC9A7FF)
 
     static let ready = Color(hex: 0x7CF0C8)
     static let offlineDot = Color(hex: 0x4ADE80)
