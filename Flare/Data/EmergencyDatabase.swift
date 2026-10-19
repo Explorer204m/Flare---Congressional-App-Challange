@@ -6,6 +6,8 @@
 //  - `areas()` and `metadata()` added for location matching and the area picker
 //  - startup recovers from a bad working copy using previous -> bundled seed
 //  - a newer bundled seed replaces an older working copy (app updates ship new data)
+//  - startup fully validates the working copy once and keeps its metadata; the bundled
+//    seed is only fully validated when its release date says it would replace it
 //  - the "date must not be in the future" clock check is removed from validation:
 //    a phone with a wrong clock must never lock someone out of emergency numbers.
 //
@@ -25,6 +27,8 @@ actor EmergencyDatabase {
     private var db: OpaquePointer?
     private let working: URL
     private let previous: URL
+    /// Metadata of the working copy, from the validation that last accepted it.
+    private var workingMetadata: [String: String]
     private static let applicationID = "1397707521"
 
     init(bundleURL: URL) throws {
@@ -36,22 +40,30 @@ actor EmergencyDatabase {
         working = folder.appendingPathComponent("emergency.sqlite")
         previous = folder.appendingPathComponent("emergency.previous.sqlite")
 
-        // 1. Make sure a valid working copy exists.
-        if !fm.fileExists(atPath: working.path) {
-            try Self.restoreWorking(from: [previous, bundleURL], to: working)
-        } else if (try? Self.validate(working)) == nil {
-            try Self.restoreWorking(from: [previous, bundleURL], to: working)
+        // 1. Make sure a valid working copy exists. The working copy is fully validated on
+        //    every launch (an unchanged release date doesn't prove the file is intact), but
+        //    only once: its metadata is kept for step 2 instead of validating it again.
+        var current: [String: String]
+        if fm.fileExists(atPath: working.path), let validated = try? Self.validate(working) {
+            current = validated
+        } else {
+            current = try Self.restoreWorking(from: [previous, bundleURL], to: working)
         }
 
         // 2. A newer bundled seed (from an app update) replaces an older working copy.
-        if let bundled = try? Self.validate(bundleURL),
-           let current = try? Self.validate(working),
-           let bundledDate = bundled["published_at"],
+        //    Reading the bundled release date is cheap and decides whether an update is needed;
+        //    the bundled file is fully validated only when it is actually going to be installed.
+        if let bundledDate = Self.publishedAt(of: bundleURL),
            let currentDate = current["published_at"],
-           bundledDate > currentDate {
+           bundledDate > currentDate,
+           let bundled = try? Self.validate(bundleURL),
+           let validatedDate = bundled["published_at"],
+           validatedDate > currentDate {
             try Self.atomicCopy(working, to: previous)
             try Self.atomicCopy(bundleURL, to: working)
+            current = bundled
         }
+        workingMetadata = current
 
         try Self.markRebuildable(working)
         db = try Self.open(working)
@@ -183,8 +195,7 @@ actor EmergencyDatabase {
         guard newMetadata["dataset_version"] == expectedVersion else {
             throw EmergencyDatabaseError.invalidRelease("Unexpected dataset version")
         }
-        let oldMetadata = try Self.validate(working)
-        guard let newDate = newMetadata["published_at"], let oldDate = oldMetadata["published_at"],
+        guard let newDate = newMetadata["published_at"], let oldDate = workingMetadata["published_at"],
               newDate > oldDate else {
             throw EmergencyDatabaseError.invalidRelease("Release is not newer")
         }
@@ -202,6 +213,7 @@ actor EmergencyDatabase {
             _ = try Self.validate(working)
             try Self.markRebuildable(working)
             db = try Self.open(working)
+            workingMetadata = newMetadata
         } catch {
             // A failed pre-swap operation leaves working unchanged; a failed
             // post-swap check restores the saved file. Recovery on next launch
@@ -274,6 +286,9 @@ actor EmergencyDatabase {
         }
         let db = try open(file)
         defer { sqlite3_close(db) }
+        // Built once per validation and used for every timestamp (about 830 in the current
+        // release). Local to this call, so no formatter is shared between threads.
+        let utc = UTCTimestampChecker()
         guard try strings(db, "PRAGMA integrity_check") == [["ok"]],
               try strings(db, "PRAGMA foreign_key_check").isEmpty,
               try strings(db, "PRAGMA application_id") == [[applicationID]],
@@ -306,7 +321,7 @@ actor EmergencyDatabase {
         }
         guard metadata["schema_version"] == "1",
               let version = metadata["dataset_version"], !version.isEmpty,
-              let published = metadata["published_at"], validUTC(published),
+              let published = metadata["published_at"], utc.isValid(published),
               let hash = metadata["reviewed_input_sha256"], hash.count == 64 else {
             throw EmergencyDatabaseError.invalidRelease("Missing release metadata")
         }
@@ -328,7 +343,7 @@ actor EmergencyDatabase {
             }
         }
         for row in try strings(db, "SELECT checked_at FROM verifications") {
-            guard validUTC(row[0]), row[0] <= published else {
+            guard utc.isValid(row[0]), row[0] <= published else {
                 throw EmergencyDatabaseError.invalidRelease("Invalid verification timestamp")
             }
         }
@@ -337,25 +352,44 @@ actor EmergencyDatabase {
 
     /// Format and round-trip check only. Deliberately no comparison with the
     /// device clock, which may be wrong.
-    private static func validUTC(_ value: String) -> Bool {
-        guard value.range(of: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$", options: .regularExpression) != nil else {
-            return false
+    ///
+    /// Make one per validation run: the formatter and pattern are built once instead of once
+    /// per timestamp. Not shared across threads or stored statically.
+    private struct UTCTimestampChecker {
+        private let formatter = ISO8601DateFormatter()
+        // Constant, known-good pattern; same ICU syntax as String.range(of:options:.regularExpression).
+        private let pattern = try! NSRegularExpression(
+            pattern: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$")
+
+        func isValid(_ value: String) -> Bool {
+            let range = NSRange(value.startIndex..., in: value)
+            guard pattern.firstMatch(in: value, range: range) != nil else { return false }
+            guard let date = formatter.date(from: value) else { return false }
+            return formatter.string(from: date) == value
         }
-        let formatter = ISO8601DateFormatter()
-        guard let date = formatter.date(from: value) else { return false }
-        return formatter.string(from: date) == value
+    }
+
+    /// Reads only the release date, with no validation. Used to decide whether a file is
+    /// worth validating, never to decide that a file is safe to install.
+    private static func publishedAt(of file: URL) -> String? {
+        guard let db = try? open(file) else { return nil }
+        defer { sqlite3_close(db) }
+        guard let rows = try? strings(db, "SELECT value FROM metadata WHERE key='published_at'"),
+              rows.count == 1, let value = rows[0].first, !value.isEmpty else { return nil }
+        return value
     }
 
     // MARK: File helpers
 
-    /// Copies the first valid candidate over the working file.
-    private static func restoreWorking(from candidates: [URL], to target: URL) throws {
+    /// Copies the first valid candidate over the working file and returns its metadata.
+    @discardableResult
+    private static func restoreWorking(from candidates: [URL], to target: URL) throws -> [String: String] {
         var lastError: Error = EmergencyDatabaseError.invalidRelease("No valid emergency database")
         for candidate in candidates where FileManager.default.fileExists(atPath: candidate.path) {
             do {
-                _ = try validate(candidate)
+                let metadata = try validate(candidate)
                 try atomicCopy(candidate, to: target)
-                return
+                return metadata
             } catch {
                 lastError = error
             }

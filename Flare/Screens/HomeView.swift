@@ -21,6 +21,7 @@ struct HomeView: View {
                 CallArea(
                     onShowNumbers: openNumbers,
                     onChooseLocation: { sheet = .locationPicker })
+                AreaAlertBanner()
                 NearbySection(openMap: openMap)
                 ToolsSection()
             }

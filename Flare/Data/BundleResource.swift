@@ -1,5 +1,6 @@
 import Foundation
 import CoreText
+import UIKit
 
 /// Finds files shipped inside the app bundle.
 ///
@@ -32,10 +33,20 @@ enum BundleResource {
 
 enum FontRegistrar {
     /// Registers the bundled Archivo fonts for this process. Call once at launch,
-    /// before any text is drawn.
+    /// before any text is drawn. Calling it again does nothing.
     static func registerBundledFonts() {
+        _ = availableArchivoFonts
+    }
+
+    /// PostScript names of the Archivo weights that loaded. Worked out once, right after
+    /// registering, so `Font.archivo` doesn't look the font up again for every piece of text.
+    /// Using it also registers the fonts, so it can't be read before registration.
+    static let availableArchivoFonts: Set<String> = {
         for url in BundleResource.urls(withExtension: "ttf") {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
-    }
+        return Set(ArchivoWeight.allCases
+            .map(\.postScriptName)
+            .filter { UIFont(name: $0, size: 17) != nil })
+    }()
 }

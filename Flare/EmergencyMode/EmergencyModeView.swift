@@ -22,9 +22,10 @@ struct EmergencyModeView: View {
     @State private var keepAwake = false
     @State private var sheet: EmergencySheet?
     @State private var preparingMessage = false
+    @State private var messageTask: Task<Void, Never>?
 
     enum EmergencySheet: String, Identifiable {
-        case message, medical, details, chooseLocation, numbers
+        case message, medical, details, chooseLocation, numbers, alerts
         var id: String { rawValue }
     }
 
@@ -46,6 +47,7 @@ struct EmergencyModeView: View {
                 ScrollView {
                     VStack(spacing: 22) {
                         topBar
+                        AreaAlertPill { sheet = .alerts }
                         CallArea(
                             onShowNumbers: { sheet = .numbers },
                             onChooseLocation: { sheet = .chooseLocation },
@@ -70,6 +72,7 @@ struct EmergencyModeView: View {
                 .scrollIndicators(.hidden)
             }
         }
+        .environment(\.flareEmergencySurface, true)
         .preferredColorScheme(.dark)
         .fallAlertOverlay()
         .onAppear {
@@ -96,37 +99,46 @@ struct EmergencyModeView: View {
         }
         .onChange(of: keepAwake) { _, value in power.setKeepAwake(value) }
         .sheet(item: $sheet) { current in
-            switch current {
-            case .message:
-                messageSheet
-            case .medical:
-                EmergencyMedicalView(contacts: contacts)
-                    .environmentObject(medical)
-            case .details:
-                EmergencyDetailsView(
-                    battery: battery, position: position,
-                    keepAwake: $keepAwake, here: here,
-                    placeName: store.selection?.title)
-            case .chooseLocation:
-                AreaPickerView().environmentObject(store)
-            case .numbers:
-                NavigationStack {
-                    ZStack {
-                        FlareBackground()
-                        NumbersView()
-                    }
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Close") { sheet = nil }.font(.flareBody)
-                            }
+            Group {
+                switch current {
+                case .message:
+                    messageSheet
+                case .medical:
+                    EmergencyMedicalView(contacts: contacts)
+                        .environmentObject(medical)
+                case .details:
+                    EmergencyDetailsView(
+                        battery: battery, position: position,
+                        keepAwake: $keepAwake, here: here,
+                        placeName: store.selection?.title)
+                case .chooseLocation:
+                    AreaPickerView().environmentObject(store)
+                case .alerts:
+                    AreaAlertsView()
+                case .numbers:
+                    NavigationStack {
+                        ZStack {
+                            FlareBackground()
+                            NumbersView()
                         }
+                            .toolbar {
+                                ToolbarItem(placement: .cancellationAction) {
+                                    Button("Close") { sheet = nil }.font(.flareBody)
+                                }
+                            }
+                    }
+                    .environmentObject(store)
                 }
-                .environmentObject(store)
             }
+            // Pure black in the sheets Emergency Mode opens too (numbers, area picker, alerts).
+            .environment(\.flareEmergencySurface, true)
         }
     }
 
     private func shutDown() {
+        messageTask?.cancel()
+        messageTask = nil
+        preparingMessage = false
         position.stop()
         battery.stop()
         power.restore()
@@ -178,10 +190,10 @@ struct EmergencyModeView: View {
         if let here {
             if canSendText {
                 EmergencyPillButton(
-                    title: preparingMessage ? "Getting your position\u{2026}" : "Send my location by SMS",
+                    title: preparingMessage ? "Locating\u{2026} tap to send now" : "Send my location by SMS",
                     systemImage: preparingMessage ? nil : "bubble.left",
                     action: sendLocation)
-                    .disabled(preparingMessage)
+                    .accessibilityHint(sendHint)
             } else {
                 // No Messages here (for example the simulator): offer the share sheet instead.
                 ShareLink(item: LocationMessage.body(for: here, placeName: store.selection?.title)) {
@@ -199,20 +211,41 @@ struct EmergencyModeView: View {
         }
     }
 
+    private var sendHint: String {
+        preparingMessage
+            ? "Flare is getting a more precise position, for up to 10 seconds. Tap again to send the current one now."
+            : "Opens a message with your coordinates for your emergency contacts."
+    }
+
     private func sendLocation() {
         guard let here else { return }
-        // A position older than 2 minutes: ask for a fresh one first, but never wait long.
-        if Date().timeIntervalSince(here.timestamp) > 120 {
-            position.refreshNow()
-            preparingMessage = true
-            Task {
-                try? await Task.sleep(for: .seconds(2))
-                preparingMessage = false
-                sheet = .message
-            }
-        } else {
-            sheet = .message
+        // Second tap while locating: send what we have now.
+        if preparingMessage {
+            openMessage()
+            return
         }
+        // Recent and precise enough: open the message at once.
+        if Date().timeIntervalSince(here.timestamp) <= 120,
+           here.horizontalAccuracy <= EmergencyPositionService.preciseAccuracy {
+            openMessage()
+            return
+        }
+        // Otherwise ask for a precise fix first. It ends as soon as one arrives and never takes
+        // longer than 10 seconds; if none comes, the message uses the last fix and says how
+        // accurate and how old it is.
+        preparingMessage = true
+        messageTask = Task {
+            _ = await position.precisePosition()
+            if Task.isCancelled { return }
+            openMessage()
+        }
+    }
+
+    private func openMessage() {
+        messageTask?.cancel()
+        messageTask = nil
+        preparingMessage = false
+        sheet = .message
     }
 
     @ViewBuilder
@@ -235,12 +268,11 @@ struct EmergencyModeView: View {
         } label: {
             VStack(spacing: 4) {
                 if let here {
-                    Group {
-                        if let place = store.selection?.title {
-                            Text("Last location: \(place), saved \(here.timestamp, style: .relative) ago")
-                        } else {
-                            Text("Last location: \(LocationMessage.coordinateText(here)), saved \(here.timestamp, style: .relative) ago")
-                        }
+                    // Minute-level age instead of a label that changes every second.
+                    let place = store.selection?.title ?? LocationMessage.coordinateText(here)
+                    let clock = FixAge.clockTime(here.timestamp)
+                    FixAgeText(timestamp: here.timestamp) { age in
+                        "Last location: \(place), saved \(age) (\(clock))"
                     }
                 } else if position.isDenied {
                     Text("Location is off for Flare. Turn it on in Settings.")
@@ -283,7 +315,8 @@ struct EmergencyPillLabel: View {
                 .lineLimit(1)
         }
         .frame(maxWidth: .infinity, minHeight: 64)
-        .background(Capsule().fill(Color(hex: 0x0B0D12)))
+        // True black on the black Emergency Mode screen; the outline keeps the button visible.
+        .background(Capsule().fill(Color.black))
         .overlay(Capsule().stroke(Color(hex: 0x2B3350), lineWidth: 2))
         .contentShape(Capsule())
     }

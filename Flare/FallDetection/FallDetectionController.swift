@@ -13,9 +13,10 @@ struct FallAlert: Equatable {
 
 /// Owns fall detection: the on/off setting, the motion sensor, and the "Are you OK?" countdown.
 ///
-/// Limits (also shown in the app): the motion sensor only runs while Flare is open on screen,
-/// because iOS suspends apps in the background. Flare never calls or texts by itself: iOS needs
-/// a tap for both, so the alert makes those buttons as large and fast to reach as it can.
+/// Limits (also shown in the app): iOS suspends apps in the background, so the motion sensor
+/// only keeps running off screen while Background protection keeps Flare awake. A fall noticed
+/// in the background is announced with notifications. Flare never calls or texts by itself:
+/// iOS needs a tap for both, so the alert makes those buttons as large and fast to reach as it can.
 @MainActor
 final class FallDetectionController: ObservableObject {
     static let shared = FallDetectionController()
@@ -87,14 +88,31 @@ final class FallDetectionController: ObservableObject {
 
     func appLeft() {
         inForeground = false
-        stopMonitoring()
+        if !BackgroundProtection.shared.isRunning { stopMonitoring() }
     }
+
+    /// Background protection started or stopped.
+    func backgroundStateChanged() {
+        if BackgroundProtection.shared.isRunning {
+            startMonitoring()
+        } else if !inForeground {
+            stopMonitoring()
+        }
+    }
+
+    /// Watching right now while Flare is not on screen.
+    var isWatchingInBackground: Bool { isMonitoring && BackgroundProtection.shared.isRunning }
 
     // MARK: Motion
 
     private func startMonitoring() {
-        guard isEnabled, inForeground, motionAvailable, !isMonitoring else { return }
+        guard isEnabled, inForeground || BackgroundProtection.shared.isRunning,
+              motionAvailable, !isMonitoring else { return }
         isMonitoring = true
+        // Keep 50 Hz. The analyzer looks for short impact peaks and a 60 ms free fall; a
+        // synthetic narrow-impact trace was detected at 50 Hz and missed at 25 Hz. Only lower
+        // this after recorded motion tests show detection still works (the practice alert
+        // doesn't exercise motion detection).
         motion.accelerometerUpdateInterval = 1.0 / 50.0
         let box = AnalyzerBox(FallAnalyzer(impactThreshold: sensitivity.impactThreshold))
         let handler = Self.makeHandler(box: box) { [weak self] in
@@ -142,6 +160,11 @@ final class FallDetectionController: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = true
         UIAccessibility.post(notification: .announcement,
                              argument: isTest ? "Test of the fall alert." : "Fall detected. Are you OK?")
+        if !isTest && UIApplication.shared.applicationState != .active {
+            // Not on screen: the alert can't be seen or heard, so notifications carry it.
+            FlareNotifications.scheduleFallCountdown(deadline: deadline,
+                                                     location: BackgroundProtection.shared.lastLocation)
+        }
 
         countdownTask?.cancel()
         countdownTask = Task { [weak self] in
@@ -173,6 +196,7 @@ final class FallDetectionController: ObservableObject {
     func dismissAlert() {
         countdownTask?.cancel()
         countdownTask = nil
+        FlareNotifications.cancelFall()
         guard alert != nil else { return }
         alert = nil
         UIApplication.shared.isIdleTimerDisabled = idleTimerBefore

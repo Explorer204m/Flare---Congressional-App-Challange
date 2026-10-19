@@ -31,6 +31,9 @@ final class EmergencyStore: ObservableObject {
     let location = LocationService()
 
     private var database: EmergencyDatabase?
+    /// Country (root area) name by country code, built once when the areas load.
+    /// The area picker asks for a country name for every area on every keystroke.
+    private var rootNames: [String: String] = [:]
     private var cancellables = Set<AnyCancellable>()
     private var started = false
     private var overrideManualOnNextFix = false
@@ -97,8 +100,13 @@ final class EmergencyStore: ObservableObject {
     }
 
     func countryName(for area: Area) -> String {
-        allAreas.first(where: { $0.countryCode == area.countryCode && $0.parentID == nil })?.name
-            ?? area.countryCode
+        rootNames[area.countryCode] ?? area.countryCode
+    }
+
+    /// Same result as searching `areas` for the first root with the code, without the scan.
+    private static func makeRootNames(from areas: [Area]) -> [String: String] {
+        Dictionary(areas.lazy.filter { $0.parentID == nil }.map { ($0.countryCode, $0.name) },
+                   uniquingKeysWith: { first, _ in first })
     }
 
     func displayTitle(for area: Area) -> String {
@@ -131,6 +139,7 @@ final class EmergencyStore: ObservableObject {
             let areas = try await opened.areas()
             let metadata = try await opened.metadata()
             database = opened
+            rootNames = Self.makeRootNames(from: areas)
             allAreas = areas
             datasetInfo = DatasetInfo(metadata: metadata)
             databaseState = .ready
@@ -226,6 +235,13 @@ final class EmergencyStore: ObservableObject {
         } else {
             defaults.removeObject(forKey: Self.selectionKey)
         }
+    }
+
+    /// The last area Flare worked out or the person chose, read straight from the phone.
+    /// Used by area alerts, which may run while the rest of the app hasn't started.
+    static func savedSelection() -> AreaSelection? {
+        guard let data = UserDefaults.standard.data(forKey: selectionKey) else { return nil }
+        return try? JSONDecoder().decode(AreaSelection.self, from: data)
     }
 
     private func restoreSelection() {

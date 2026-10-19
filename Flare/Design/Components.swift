@@ -3,8 +3,27 @@ import SwiftUI
 // MARK: - Background
 
 struct FlareBackground: View {
+    @Environment(\.flareEmergencySurface) private var emergencySurface
+
     var body: some View {
-        FlareGradient.background.ignoresSafeArea()
+        if emergencySurface {
+            Color.black.ignoresSafeArea()
+        } else {
+            FlareGradient.background.ignoresSafeArea()
+        }
+    }
+}
+
+/// True inside Emergency Mode and the sheets it opens: backgrounds are pure black and
+/// decorative shadows are left out. Button outlines and the call button itself stay as they are.
+private struct FlareEmergencySurfaceKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var flareEmergencySurface: Bool {
+        get { self[FlareEmergencySurfaceKey.self] }
+        set { self[FlareEmergencySurfaceKey.self] = newValue }
     }
 }
 
@@ -114,6 +133,7 @@ struct SectionHeader: View {
 struct BigCallButton: View {
     let number: String
     let action: () -> Void
+    @Environment(\.flareEmergencySurface) private var emergencySurface
 
     var body: some View {
         Button(action: action) {
@@ -125,7 +145,10 @@ struct BigCallButton: View {
                 Circle()
                     .fill(FlareGradient.flare)
                     .frame(width: 176, height: 176)
-                    .shadow(color: FlareColor.flareEnd.opacity(0.55), radius: 30, y: 8)
+                    // Decorative glow; left out on Emergency Mode's black screen, where the
+                    // orange fill and the two rings already mark the button clearly.
+                    .shadow(color: FlareColor.flareEnd.opacity(emergencySurface ? 0 : 0.55),
+                            radius: emergencySurface ? 0 : 30, y: emergencySurface ? 0 : 8)
                 VStack(spacing: 6) {
                     Image(systemName: "phone.fill")
                         .font(.system(size: 42, weight: .bold))

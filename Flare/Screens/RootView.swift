@@ -61,7 +61,11 @@ struct RootView: View {
         }
         .preferredColorScheme(.dark)
         .task { await store.start() }
-        .task { fall.appBecameActive() }
+        .task {
+            fall.appBecameActive()
+            AreaAlertStore.shared.appBecameActive()
+            BackgroundProtection.shared.setLowPower(emergency.isActive)
+        }
         .task {
             // Launched by the "Start Emergency Mode" action: show it once the UI is up.
             try? await Task.sleep(for: .milliseconds(500))
@@ -69,20 +73,28 @@ struct RootView: View {
         }
         .onChange(of: emergency.isActive) { _, active in
             showEmergency = active
+            // Emergency Mode: lowest-power background location (alerts are checked every 15 min).
+            BackgroundProtection.shared.setLowPower(active)
         }
         .onChange(of: showEmergency) { _, shown in
             if !shown { emergency.isActive = false }
         }
         .onChange(of: store.location.latestFix) { _, fix in
-            if let fix { nearby.updateFix(fix) }
+            if let fix {
+                nearby.updateFix(fix)
+                AreaAlertStore.shared.update(location: fix)
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 store.refreshLocation()
+                BackgroundProtection.shared.resumeIfNeeded()
                 fall.appBecameActive()
+                AreaAlertStore.shared.appBecameActive()
                 if emergency.isActive && !showEmergency { showEmergency = true }
             } else {
                 fall.appLeft()
+                AreaAlertStore.shared.appLeft()
             }
         }
     }

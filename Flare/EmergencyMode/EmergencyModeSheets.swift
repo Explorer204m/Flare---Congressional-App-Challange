@@ -198,7 +198,11 @@ struct EmergencyDetailsView: View {
                         .font(.flareBody)
                         .foregroundStyle(FlareColor.text)
                 }
-                Text("Accuracy about \(Int(max(here.horizontalAccuracy, 1).rounded())) m \u{00B7} saved \(here.timestamp, style: .relative) ago")
+                let accuracy = Int(max(here.horizontalAccuracy, 1).rounded())
+                let clock = FixAge.clockTime(here.timestamp)
+                FixAgeText(timestamp: here.timestamp) { age in
+                    "Accuracy about \(accuracy) m \u{00B7} saved \(age) (\(clock))"
+                }
                     .font(.flareCaption)
                     .foregroundStyle(FlareColor.secondaryText)
                 if let placeName {
@@ -224,9 +228,11 @@ struct EmergencyDetailsView: View {
                     Button {
                         position.refreshNow()
                     } label: {
-                        pill("Update now", systemImage: "arrow.clockwise")
+                        pill(position.isRefining ? "Updating\u{2026}" : "Update now",
+                             systemImage: position.isRefining ? "location.magnifyingglass" : "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
+                    .disabled(position.isRefining)
                 }
                 .padding(.top, 4)
 
@@ -300,7 +306,7 @@ struct EmergencyDetailsView: View {
                         ? "Low Power Mode is on."
                         : "Turn on Low Power Mode (Control Center, or Settings > Battery). Flare can't do this for you.")
                 checklistRow(done: true,
-                             text: "Flare dims the screen and checks GPS only every few minutes.")
+                             text: "Flare dims the screen and checks GPS only every few minutes. Before you send your location it asks for a precise fix for up to 10 seconds.")
                 checklistRow(done: false,
                              text: "Close apps you don't need, and lower the brightness more if you can still read the screen.")
             }

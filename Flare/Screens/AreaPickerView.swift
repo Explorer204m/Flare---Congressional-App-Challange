@@ -28,16 +28,18 @@ struct AreaPickerView: View {
     }
 
     var body: some View {
+        // Filter once per update; the list and the empty message share the result.
+        let results = filtered
         NavigationStack {
             ZStack {
                 FlareBackground()
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         if !browseOnly { locationRow }
-                        ForEach(filtered) { area in
+                        ForEach(results) { area in
                             row(for: area)
                         }
-                        if filtered.isEmpty {
+                        if results.isEmpty {
                             Text("No matching country, state or city in this dataset.")
                                 .font(.flareSecondary)
                                 .foregroundStyle(FlareColor.secondaryText)

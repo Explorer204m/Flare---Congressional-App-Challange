@@ -88,7 +88,7 @@ enum FlareGradient {
 /// Archivo in three weights (Medium 500, Bold 700, ExtraBold 800).
 /// Falls back to the system font if the bundled fonts could not be loaded,
 /// so text is never missing.
-enum ArchivoWeight {
+enum ArchivoWeight: CaseIterable {
     case medium, bold, extraBold
 
     var postScriptName: String {
@@ -110,7 +110,9 @@ enum ArchivoWeight {
 
 extension Font {
     static func archivo(_ weight: ArchivoWeight, size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        if UIFont(name: weight.postScriptName, size: size) != nil {
+        // Availability is checked once after registration (see FontRegistrar). `relativeTo`
+        // keeps Dynamic Type scaling either way.
+        if FontRegistrar.availableArchivoFonts.contains(weight.postScriptName) {
             return .custom(weight.postScriptName, size: size, relativeTo: style)
         }
         return .system(size: size, weight: weight.systemWeight)
