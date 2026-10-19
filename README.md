@@ -108,7 +108,7 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 
 ## Data
 
-`Flare/Resources/emergency.sqlite` is release **2026.10.10.2** from the `database` folder (670 contacts, 179 countries and areas, all US states and DC), checksum-matched to `database/emergency.sqlite.sha256`.
+`Flare/Resources/emergency.sqlite` is release **2026.10.19.1** from the `database` folder (673 contacts, 180 countries and areas, all US states and DC; Taiwan added), checksum-matched to `database/emergency.sqlite.sha256`.
 
 `Flare/Data/EmergencyDatabase.swift` is adapted from `database/ios/EmergencyDatabase.swift`. Changes: typed lookup, area and metadata queries, recovery from a bad working copy (previous, then bundled), a newer bundled database replaces an older working copy, and the future-date clock check was removed so a phone with a wrong clock can't lock the app out of its numbers.
 
