@@ -198,11 +198,7 @@ struct EmergencyDetailsView: View {
                         .font(.flareBody)
                         .foregroundStyle(FlareColor.text)
                 }
-                let accuracy = Int(max(here.horizontalAccuracy, 1).rounded())
-                let clock = FixAge.clockTime(here.timestamp)
-                FixAgeText(timestamp: here.timestamp) { age in
-                    "Accuracy about \(accuracy) m \u{00B7} saved \(age) (\(clock))"
-                }
+                Text("Accuracy about \(Int(max(here.horizontalAccuracy, 1).rounded())) m \u{00B7} saved \(here.timestamp, style: .relative) ago")
                     .font(.flareCaption)
                     .foregroundStyle(FlareColor.secondaryText)
                 if let placeName {
@@ -228,11 +224,9 @@ struct EmergencyDetailsView: View {
                     Button {
                         position.refreshNow()
                     } label: {
-                        pill(position.isRefining ? "Updating\u{2026}" : "Update now",
-                             systemImage: position.isRefining ? "location.magnifyingglass" : "arrow.clockwise")
+                        pill("Update now", systemImage: "arrow.clockwise")
                     }
                     .buttonStyle(.plain)
-                    .disabled(position.isRefining)
                 }
                 .padding(.top, 4)
 
@@ -306,7 +300,7 @@ struct EmergencyDetailsView: View {
                         ? "Low Power Mode is on."
                         : "Turn on Low Power Mode (Control Center, or Settings > Battery). Flare can't do this for you.")
                 checklistRow(done: true,
-                             text: "Flare dims the screen and checks GPS only every few minutes. Before you send your location it asks for a precise fix for up to 10 seconds.")
+                             text: "Flare dims the screen and checks GPS only every few minutes.")
                 checklistRow(done: false,
                              text: "Close apps you don't need, and lower the brightness more if you can still read the screen.")
             }
@@ -359,8 +353,9 @@ struct EmergencyDetailsView: View {
                 bullet("Move to open ground, higher up and away from buildings. Signal is usually better outdoors.")
                 bullet("Try the call anyway. In many countries an emergency call can connect through another carrier's network even when your own shows no bars.")
                 bullet("If calls fail, use \u{201C}Send my location by SMS\u{201D}. A text can get through on a weak signal, and may be held and sent when the signal returns.")
-                bullet("Some iPhones (iPhone 14 and later, where it is offered) can contact emergency services by satellite when there is no cell or Wi-Fi coverage. Check Settings > Emergency SOS to see what your iPhone and country support. Flare can't use satellite itself, so it can only point you to this.")
+                bullet("iPhone 14 and later can text emergency services by satellite when there is no cell or Wi-Fi coverage, in the countries Apple lists. Flare can't use the satellite itself; the button below opens Messages, and your iPhone offers the satellite from there.")
                 bullet("Airplane Mode saves battery, but it blocks calls and texts. Turn it off before you try to call.")
+                SatelliteTextCard()
             }
             .padding(.top, 8)
         } label: {

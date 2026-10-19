@@ -64,7 +64,7 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 - **Time left** (in Details) is an estimate from how fast the battery dropped since the screen opened (needs about 5 minutes and a 1% drop). iOS gives apps no such number, so the screen says it is rough.
 - **What iOS does not allow, and the app says so:** apps can't pause other apps, turn on Low Power Mode, Airplane Mode or radios, show other apps' battery use, or make the phone open an app when it is unlocked. Emergency Mode shows a checklist for what the person must do, and the "Make Emergency Mode one tap" guide explains a Shortcuts shortcut (Set Low Power Mode, then Start Emergency Mode), the Action Button / Back Tap, and Guided Access. The guide's setup steps depend on iPhone model and iOS version and should be tried before they are needed. If Flare is on screen when the phone locks, iOS returns to it on unlock.
 - **Send my location by SMS** opens the system Messages composer with the person's emergency contacts from Medical ID, coordinates, an Apple Maps link and a Plus Code. iOS does not let an app send a text silently, so the person taps Send. Where Messages can't send (for example the simulator) it offers the share sheet.
-- **Satellite:** Flare can't use satellite. The card only points to the iPhone's own Emergency SOS via satellite on models and in countries that support it.
+- **Satellite:** Flare can't use satellite itself, and iOS has no link that opens Apple's satellite screen. Home > Tools > SMS / Satellite (and the "No signal?" card) opens Messages addressed to the area's emergency number, which is the way in Apple documents: with no cell or Wi-Fi, an iPhone 14 or later offers "Emergency Services" by satellite from there. The buttons only appear in the countries Apple lists (support.apple.com/en-us/101573, checked October 2026, in `SatelliteSOS.countries`); elsewhere the screen says the country isn't listed and to call instead. With signal the text goes as a normal SMS, which many services can't receive, so the screen says to use it only when a call won't connect.
 - Coordinates come from GPS, read every few minutes only while the screen is open, and never leave the phone except in a message the person sends. Plus Code encoding follows the Open Location Code standard (checked against its published example).
 
 ## Fall detection: how it works and its limits
@@ -108,7 +108,7 @@ Calls start only when the person taps a button (`tel:`); nothing dials automatic
 
 ## Data
 
-`Flare/Resources/emergency.sqlite` is release **2026.10.19.1** from the `database` folder (673 contacts, 180 countries and areas, all US states and DC; Taiwan added), checksum-matched to `database/emergency.sqlite.sha256`.
+`Flare/Resources/emergency.sqlite` is release **2026.10.10.2** from the `database` folder (670 contacts, 179 countries and areas, all US states and DC), checksum-matched to `database/emergency.sqlite.sha256`.
 
 `Flare/Data/EmergencyDatabase.swift` is adapted from `database/ios/EmergencyDatabase.swift`. Changes: typed lookup, area and metadata queries, recovery from a bad working copy (previous, then bundled), a newer bundled database replaces an older working copy, and the future-date clock check was removed so a phone with a wrong clock can't lock the app out of its numbers.
 
@@ -132,6 +132,7 @@ Flare/
   FallDetection/           Fall analyzer, controller (on/off, countdown), alert and settings screens
   Background/              Background protection (location session), notifications, app delegate
   Alerts/                  Area alerts: NWS and GDACS parsing, store and schedule, banner and list
+  Satellite/               SMS / Satellite screen: text the emergency number in Messages, Apple satellite guidance
   EmergencyMode/           Emergency Mode screen, battery monitor, GPS, Plus Code, text-location, Shortcuts action
   Screens/                 Home, call area, Numbers, picker, data info, tabs
   Resources/               emergency.sqlite, Archivo fonts (SIL OFL)

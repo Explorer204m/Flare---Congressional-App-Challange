@@ -175,8 +175,10 @@ struct NearbySection: View {
 
 struct ToolsSection: View {
     @EnvironmentObject private var emergency: EmergencyModeController
+    @EnvironmentObject private var store: EmergencyStore
     @ObservedObject private var fall = FallDetectionController.shared
     @State private var showFall = false
+    @State private var showSatellite = false
 
     var body: some View {
         VStack(spacing: 12) {
@@ -201,15 +203,25 @@ struct ToolsSection: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Fall detection. Currently \(fall.isEnabled ? "on" : "off")")
                 Button {
-                    emergency.isActive = true
+                    showSatellite = true
                 } label: {
                     ToolTile(systemImage: "antenna.radiowaves.left.and.right", title: "SMS / Satellite",
-                             subtitle: "In Emergency Mode", tint: FlareColor.police)
+                             subtitle: "Text for help", tint: FlareColor.police)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("SMS and satellite guidance. Opens Emergency Mode")
+                .accessibilityLabel("SMS and satellite. Text emergency services, by satellite where your iPhone offers it")
             }
         }
         .sheet(isPresented: $showFall) { FallDetectionView() }
+        .sheet(isPresented: $showSatellite) {
+            SatelliteHelpView(openEmergencyMode: {
+                // Let the sheet close before Emergency Mode covers the screen.
+                Task {
+                    try? await Task.sleep(for: .milliseconds(400))
+                    emergency.isActive = true
+                }
+            })
+            .environmentObject(store)
+        }
     }
 }
