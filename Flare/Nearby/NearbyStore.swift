@@ -171,7 +171,18 @@ final class NearbyStore: ObservableObject {
             let found = await withTaskGroup(of: (NearbyKind, [NearbyPlace]?).self) { group in
                 for kind in NearbyKind.allCases {
                     group.addTask {
-                        (kind, try? await NearbyStore.searchPlaces(kind: kind, around: coordinate))
+                        do {
+                            let places = try await NearbyStore.searchPlaces(kind: kind, around: coordinate)
+                            #if DEBUG
+                            print("[Nearby] \(kind.rawValue): \(places.count) places around \(coordinate.latitude), \(coordinate.longitude)")
+                            #endif
+                            return (kind, places)
+                        } catch {
+                            #if DEBUG
+                            print("[Nearby] \(kind.rawValue) search failed: \(error)")
+                            #endif
+                            return (kind, nil)
+                        }
                     }
                 }
                 var collected: [NearbyKind: [NearbyPlace]] = [:]
@@ -203,35 +214,64 @@ final class NearbyStore: ObservableObject {
     nonisolated private static func searchPlaces(kind: NearbyKind,
                                                  around center: CLLocationCoordinate2D) async throws -> [NearbyPlace] {
         let origin = CLLocation(latitude: center.latitude, longitude: center.longitude)
-        for radius in radii {
-            do {
-                let items: [MKMapItem]
-                if let category = kind.category {
-                    let request = MKLocalPointsOfInterestRequest(center: center, radius: radius)
-                    request.pointOfInterestFilter = MKPointOfInterestFilter(including: [category])
-                    items = try await MKLocalSearch(request: request).start().mapItems
-                } else {
-                    // Vets: a text search, limited to places inside this radius.
-                    let request = MKLocalSearch.Request()
-                    request.naturalLanguageQuery = "emergency veterinarian"
-                    request.region = MKCoordinateRegion(center: center,
-                                                        latitudinalMeters: radius * 2,
-                                                        longitudinalMeters: radius * 2)
-                    request.resultTypes = .pointOfInterest
-                    items = try await MKLocalSearch(request: request).start().mapItems
-                }
-                let now = Date()
-                var seen = Set<String>()
-                let places = items
-                    .compactMap { NearbyPlace(item: $0, kind: kind, savedAt: now) }
-                    .filter { seen.insert($0.id).inserted }
-                    .filter { kind.category != nil || $0.distance(from: origin) <= radius }
-                    .sorted { $0.distance(from: origin) < $1.distance(from: origin) }
-                if !places.isEmpty { return Array(places.prefix(resultLimit)) }
-            } catch let error as MKError where error.code == .placemarkNotFound {
-                continue   // nothing in this radius: try a wider one
-            }
+        let query: String
+        switch kind {
+        case .hospital: query = "hospital"
+        case .police: query = "police station"
+        case .fire: query = "fire station"
+        case .pharmacy: query = "pharmacy"
+        case .vet: query = "emergency veterinarian"
         }
+        // A real failure (not just "nothing found here"), so a dead connection still shows as offline.
+        var failure: Error?
+        for radius in radii {
+            var items: [MKMapItem] = []
+            var fromText = false
+
+            // 1. Apple Maps' own category search.
+            if let category = kind.category {
+                let request = MKLocalPointsOfInterestRequest(center: center, radius: radius)
+                request.pointOfInterestFilter = MKPointOfInterestFilter(including: [category])
+                do {
+                    items = try await MKLocalSearch(request: request).start().mapItems
+                } catch {
+                    if (error as? MKError)?.code != .placemarkNotFound { failure = error }
+                }
+            }
+
+            // 2. Text search: how vets are found, and the fallback when the category search
+            //    returns nothing (it can come back empty in places where the text search works).
+            if items.isEmpty {
+                fromText = true
+                let request = MKLocalSearch.Request()
+                request.naturalLanguageQuery = query
+                request.region = MKCoordinateRegion(center: center,
+                                                    latitudinalMeters: radius * 2,
+                                                    longitudinalMeters: radius * 2)
+                request.resultTypes = .pointOfInterest
+                do {
+                    items = try await MKLocalSearch(request: request).start().mapItems
+                } catch {
+                    if (error as? MKError)?.code != .placemarkNotFound { failure = error }
+                }
+            }
+
+            let now = Date()
+            var seen = Set<String>()
+            let places = items
+                // Text results can include other kinds of place: keep only the right category.
+                .filter { item in
+                    guard fromText, let wanted = kind.category,
+                          let found = item.pointOfInterestCategory else { return true }
+                    return found == wanted
+                }
+                .compactMap { NearbyPlace(item: $0, kind: kind, savedAt: now) }
+                .filter { seen.insert($0.id).inserted }
+                .filter { $0.distance(from: origin) <= radius }
+                .sorted { $0.distance(from: origin) < $1.distance(from: origin) }
+            if !places.isEmpty { return Array(places.prefix(resultLimit)) }
+        }
+        if let failure { throw failure }
         return []
     }
 }
