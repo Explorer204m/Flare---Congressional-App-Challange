@@ -9,7 +9,7 @@ struct HomeView: View {
     @State private var sheet: HomeSheet?
 
     enum HomeSheet: String, Identifiable {
-        case locationPicker, dataset
+        case locationPicker, settings
         var id: String { rawValue }
     }
 
@@ -33,7 +33,7 @@ struct HomeView: View {
         .sheet(item: $sheet) { current in
             switch current {
             case .locationPicker: AreaPickerView()
-            case .dataset: DatasetInfoView()
+            case .settings: SettingsView()
             }
         }
     }
@@ -52,12 +52,9 @@ struct HomeView: View {
         return nil
     }
 
-    private var statusLabel: (text: String, dot: Color) {
-        switch store.databaseState {
-        case .ready: return ("Offline ready", FlareColor.offlineDot)
-        case .loading: return ("Loading", FlareColor.secondaryText)
-        case .failed: return ("Data error", FlareColor.failure)
-        }
+    private var hasDataProblem: Bool {
+        if case .failed = store.databaseState { return true }
+        return false
     }
 
     private var header: some View {
@@ -74,12 +71,12 @@ struct HomeView: View {
                 Spacer(minLength: 6)
 
                 Button {
-                    sheet = .dataset
+                    sheet = .settings
                 } label: {
-                    StatusPill(label: statusLabel.text, dot: statusLabel.dot)
+                    SettingsPill(dataProblem: hasDataProblem)
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Data status: \(statusLabel.text). Show details")
+                .accessibilityLabel(hasDataProblem ? "Settings. The emergency data has a problem" : "Settings")
             }
             if let selection = store.selection, isStale(selection) {
                 Text("Last known location \u{00B7} confirmed \(selection.resolvedAt, style: .relative) ago")

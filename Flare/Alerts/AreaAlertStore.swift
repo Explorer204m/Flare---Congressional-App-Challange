@@ -87,6 +87,21 @@ final class AreaAlertStore: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.reschedule() }
             .store(in: &cancellables)
+
+        // Turning an alert source on or off in Settings takes effect at once.
+        let settings = AppSettings.shared
+        settings.$weatherAlerts
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isOn in self?.weatherSettingChanged(isOn: isOn) }
+            .store(in: &cancellables)
+        settings.$disasterAlerts
+            .dropFirst()
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isOn in self?.disasterSettingChanged(isOn: isOn) }
+            .store(in: &cancellables)
     }
 
     // MARK: Lifecycle
@@ -107,6 +122,39 @@ final class AreaAlertStore: ObservableObject {
 
     func backgroundStateChanged() { reschedule() }
 
+    // MARK: Settings
+
+    private func weatherSettingChanged(isOn: Bool) {
+        if !isOn {
+            // Nothing from this source stays on screen once the person turns it off.
+            nwsAlerts = []
+            weatherCheckedAt = nil
+            coversWeather = false
+            publish(now: Date())
+            save()
+        }
+        reschedule()
+        checkAfterSettingChange(turnedOn: isOn)
+    }
+
+    private func disasterSettingChanged(isOn: Bool) {
+        if !isOn {
+            gdacsAlerts = []
+            gdacsCheckedAt = nil
+            // Forget the last download position so turning it back on fetches again at once.
+            gdacsCenter = nil
+            publish(now: Date())
+            save()
+        }
+        reschedule()
+        checkAfterSettingChange(turnedOn: isOn)
+    }
+
+    private func checkAfterSettingChange(turnedOn: Bool) {
+        guard turnedOn, location != nil, foreground || BackgroundProtection.shared.isRunning else { return }
+        Task { await checkNow() }
+    }
+
     func update(location newLocation: CLLocation) {
         let first = location == nil
         location = newLocation
@@ -126,6 +174,8 @@ final class AreaAlertStore: ObservableObject {
     private func reschedule() {
         loop?.cancel()
         loop = nil
+        // Both sources off in Settings: nothing to check.
+        guard AppSettings.shared.weatherAlerts || AppSettings.shared.disasterAlerts else { return }
         guard foreground || BackgroundProtection.shared.isRunning else { return }
         // Nothing to check without a location; update(location:) calls this again.
         guard location != nil else { return }
@@ -161,8 +211,11 @@ final class AreaAlertStore: ObservableObject {
         var succeeded = false
         var failed = false
 
+        let settings = AppSettings.shared
         let country = EmergencyStore.savedSelection()?.countryCode
-        let wantsWeather = country.map { Self.nwsCountries.contains($0) } ?? false
+        // The National Weather Service needs the position, so it only runs when the person
+        // has it switched on (the default) and is in the US.
+        let wantsWeather = settings.weatherAlerts && (country.map { Self.nwsCountries.contains($0) } ?? false)
         if wantsWeather {
             do {
                 nwsAlerts = try await Self.fetchNWS(near: location)
@@ -175,19 +228,23 @@ final class AreaAlertStore: ObservableObject {
             nwsAlerts = []
         }
 
-        let movedFar = gdacsCenter.map { $0.distance(from: location) > 50_000 } ?? true
-        let gdacsDue = gdacsCheckedAt.map { now.timeIntervalSince($0) >= Self.gdacsInterval } ?? true
-        if gdacsDue || movedFar {
-            do {
-                gdacsAlerts = try await Self.fetchGDACS(near: location)
-                gdacsCheckedAt = now
-                gdacsCenter = location
+        if settings.disasterAlerts {
+            let movedFar = gdacsCenter.map { $0.distance(from: location) > 50_000 } ?? true
+            let gdacsDue = gdacsCheckedAt.map { now.timeIntervalSince($0) >= Self.gdacsInterval } ?? true
+            if gdacsDue || movedFar {
+                do {
+                    gdacsAlerts = try await Self.fetchGDACS(near: location)
+                    gdacsCheckedAt = now
+                    gdacsCenter = location
+                    succeeded = true
+                } catch {
+                    failed = true
+                }
+            } else {
                 succeeded = true
-            } catch {
-                failed = true
             }
         } else {
-            succeeded = true
+            gdacsAlerts = []
         }
 
         coversWeather = wantsWeather
@@ -224,7 +281,7 @@ final class AreaAlertStore: ObservableObject {
         let onScreen = UIApplication.shared.applicationState == .active
         let currentKeys = Set(alerts.map { $0.notifyKey })
         for alert in alerts where !notifiedKeys.contains(alert.notifyKey) {
-            if !onScreen && alert.severity >= .severe {
+            if !onScreen && alert.severity >= .severe && AppSettings.shared.alertNotifications {
                 FlareNotifications.postAreaAlert(alert)
             }
         }

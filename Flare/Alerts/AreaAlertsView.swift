@@ -14,6 +14,7 @@ extension AlertSeverity {
 /// Home: the most serious current alert, or a quiet "no alerts" line. Opens the full list.
 struct AreaAlertBanner: View {
     @ObservedObject private var alerts = AreaAlertStore.shared
+    @ObservedObject private var settings = AppSettings.shared
     @State private var showList = false
 
     var body: some View {
@@ -77,6 +78,7 @@ struct AreaAlertBanner: View {
     }
 
     private var quietText: String {
+        if !settings.weatherAlerts && !settings.disasterAlerts { return "Area alerts are turned off in Settings" }
         guard let checked = alerts.checkedAt else { return "Area alerts: not checked yet" }
         let ago = checked.formatted(.relative(presentation: .named))
         return "No area alerts \u{00B7} checked \(ago)"
@@ -124,6 +126,7 @@ struct AreaAlertPill: View {
 /// Every current alert, as issued, plus how they are checked and the Background protection switch.
 struct AreaAlertsView: View {
     @ObservedObject private var store = AreaAlertStore.shared
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -136,7 +139,9 @@ struct AreaAlertsView: View {
                         freshness
                         if store.alerts.isEmpty {
                             NoticeCard(systemImage: "checkmark.shield",
-                                       message: "No alerts for your area right now from the sources Flare checks.",
+                                       message: settings.weatherAlerts || settings.disasterAlerts
+                                           ? "No alerts for your area right now from the sources Flare checks."
+                                           : "Both alert sources are turned off. Turn one on in Settings to see alerts here.",
                                        tint: FlareColor.ready) { EmptyView() }
                         } else {
                             ForEach(store.alerts) { alert in
@@ -192,7 +197,9 @@ struct AreaAlertsView: View {
             if store.coversWeather {
                 Text("Weather warnings (NWS): \(updatedText(store.weatherCheckedAt))")
             }
-            Text("Major disasters (GDACS): \(updatedText(store.gdacsCheckedAt))")
+            if settings.disasterAlerts {
+                Text("Major disasters (GDACS): \(updatedText(store.gdacsCheckedAt))")
+            }
             if store.gdacsMayBeStale {
                 Text("The disaster list hasn't been updated for a while. GDACS events have no end time, so some shown here may already be over.")
                     .foregroundStyle(FlareColor.warning)
@@ -208,14 +215,21 @@ struct AreaAlertsView: View {
         return "updated \(date.formatted(.relative(presentation: .named)))"
     }
 
+    private var weatherCoverageText: String {
+        if !settings.weatherAlerts {
+            return "Weather and flood warnings are turned off in Settings, so no position is sent to the National Weather Service."
+        }
+        return store.coversWeather
+            ? "Weather and flood warnings: US National Weather Service. Flare sends your position, rounded to about 100 m, to look them up. You can turn this off in Settings."
+            : "Weather and flood warnings are only available in the US for now, so Flare shows major disasters only here."
+    }
+
     private var coverage: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Where these come from")
                 .font(.flareSection)
                 .foregroundStyle(FlareColor.text)
-            Text(store.coversWeather
-                 ? "Weather and flood warnings: US National Weather Service. Flare sends your position, rounded to about 100 m, to look them up."
-                 : "Weather and flood warnings are only available in the US for now, so Flare shows major disasters only here.")
+            Text(weatherCoverageText)
             Text("Major disasters worldwide (earthquakes, cyclones, floods, volcanoes): GDACS, the Global Disaster Alert and Coordination System. Only orange and red alerts near you are shown, and no location is sent.")
             Text("Checked every 5 minutes, or every 15 minutes in Emergency Mode to save battery. The worldwide disaster list is downloaded every 30 minutes, or sooner if you move far. Alert text is shown exactly as issued.")
             Text("These are extra. Your phone's own government alerts are the reliable channel: keep Emergency Alerts on in Settings \u{203A} Notifications.")

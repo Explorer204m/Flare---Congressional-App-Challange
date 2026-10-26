@@ -67,7 +67,7 @@ final class NearbyStore: ObservableObject {
             refreshIfNeeded(force: true)
             return
         }
-        if hasUsedNearby { refreshIfNeeded(force: false) }
+        if hasUsedNearby && AppSettings.shared.nearbyAutoUpdate { refreshIfNeeded(force: false) }
     }
 
     /// Called when the Nearby tab is shown.
